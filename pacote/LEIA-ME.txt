@@ -9,9 +9,13 @@ COMO USAR
 2. Dê dois cliques em "Iniciar Simulador.bat".
    - Na primeira vez o Windows pode mostrar "O Windows protegeu o computador":
      clique em "Mais informações" > "Executar assim mesmo".
-   - O navegador abre sozinho em http://localhost:8765/api/simulador.html
+   - O simulador abre numa janela própria (Edge ou Chrome).
 3. Na tela: baixe a planilha-modelo, preencha, envie e clique em Calcular.
-4. Para desligar: "Encerrar Simulador.bat".
+4. Para desligar: basta fechar a janela do simulador. A calculadora é
+   desligada sozinha em poucos segundos.
+   "Encerrar Simulador.bat" continua disponível caso algo fique preso.
+   (Se preferir abrir no navegador padrão, sem fechamento automático, troque
+   "fechar_com_navegador" para false no config.json.)
 
 ATUALIZAÇÃO AUTOMÁTICA
 Toda vez que você abre o simulador ele verifica se há versão nova (gerada

@@ -81,9 +81,11 @@ if ($cfg.verificar_atualizacao) {
 }
 
 # ---------- 2) calculadora ----------
+$IniciouCalculadora = $false
 if (Calculadora-NoAr) {
   Escrever 'Calculadora ja esta em execucao.'
 } else {
+  $IniciouCalculadora = $true
   $java = Join-Path $Raiz 'jre\bin\java.exe'
   if (-not (Test-Path $java)) {
     $cmd = Get-Command java.exe -ErrorAction SilentlyContinue
@@ -109,9 +111,94 @@ if (Calculadora-NoAr) {
 }
 
 # ---------- 3) navegador ----------
-Escrever "Abrindo $UrlTela"
-if (-not $env:CI) {
-  try { Start-Process $UrlTela } catch { Escrever "Abra no navegador: $UrlTela" }
+# Abre o simulador numa janela propria (Edge ou Chrome com perfil separado) e,
+# quando essa janela for fechada, desliga a calculadora automaticamente.
+function Achar-Navegador {
+  $candidatos = @(
+    (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe'),
+    (Join-Path $env:ProgramFiles 'Microsoft\Edge\Application\msedge.exe'),
+    (Join-Path $env:ProgramFiles 'Google\Chrome\Application\chrome.exe'),
+    (Join-Path ${env:ProgramFiles(x86)} 'Google\Chrome\Application\chrome.exe'),
+    (Join-Path $env:LOCALAPPDATA 'Google\Chrome\Application\chrome.exe')
+  )
+  foreach ($c in $candidatos) { if ($c -and (Test-Path $c)) { return $c } }
+  return $null
 }
-Escrever 'Pronto. Pode fechar esta janela; para desligar use "Encerrar Simulador".'
-Start-Sleep -Seconds 4
+
+function Processos-DoPerfil($perfil) {
+  Get-CimInstance Win32_Process -Filter "Name='msedge.exe' or Name='chrome.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -and $_.CommandLine.Contains($perfil) }
+}
+
+function Janela-Aberta($perfil) {
+  foreach ($proc in (Processos-DoPerfil $perfil)) {
+    $gp = Get-Process -Id $proc.ProcessId -ErrorAction SilentlyContinue
+    if ($gp -and $gp.MainWindowHandle -ne [IntPtr]::Zero) { return $true }
+  }
+  return $false
+}
+
+function Minimizar-Console {
+  try {
+    Add-Type -Namespace Sim -Name Win -MemberDefinition @'
+[DllImport("kernel32.dll")] public static extern System.IntPtr GetConsoleWindow();
+[DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr h, int n);
+'@ -ErrorAction Stop
+    [Sim.Win]::ShowWindow([Sim.Win]::GetConsoleWindow(), 6) | Out-Null
+  } catch {}
+}
+
+if ($env:SIMULADOR_SEM_NAVEGADOR) {
+  Escrever "Simulador no ar em $UrlTela"
+  exit 0
+}
+
+$navegador = $null
+if ($cfg.fechar_com_navegador -ne $false) { $navegador = Achar-Navegador }
+
+if (-not $navegador) {
+  Escrever "Abrindo $UrlTela"
+  try { Start-Process $UrlTela } catch { Escrever "Abra no navegador: $UrlTela" }
+  Escrever 'Pronto. Pode fechar esta janela; para desligar use "Encerrar Simulador".'
+  Start-Sleep -Seconds 4
+  exit 0
+}
+
+$Perfil = Join-Path $Raiz 'perfil-navegador'
+New-Item -ItemType Directory -Force -Path $Perfil | Out-Null
+$argsNav = @("--app=$UrlTela", "--user-data-dir=`"$Perfil`"", '--no-first-run', '--no-default-browser-check',
+             '--disable-background-mode', '--disable-features=msEdgeStartupBoost', '--window-size=1366,900')
+Escrever "Abrindo o simulador ($([IO.Path]::GetFileNameWithoutExtension($navegador)))..."
+$nav = Start-Process -FilePath $navegador -ArgumentList $argsNav -PassThru
+
+if (-not $IniciouCalculadora) {
+  # outra janela do simulador ja controla a calculadora; esta so abre a tela
+  Start-Sleep -Seconds 3
+  exit 0
+}
+
+Escrever 'Simulador aberto. Ao fechar a janela do simulador, a calculadora e desligada automaticamente.'
+Minimizar-Console
+
+# espera a janela aparecer (ate 40 s) e depois acompanha ate ela ser fechada
+$apareceu = $false
+for ($i = 0; $i -lt 40 -and -not $apareceu; $i++) {
+  Start-Sleep -Seconds 1
+  $apareceu = Janela-Aberta $Perfil
+}
+$semJanela = 0
+while ($true) {
+  Start-Sleep -Seconds 2
+  if ($apareceu) {
+    if (Janela-Aberta $Perfil) { $semJanela = 0 } else { $semJanela++ }
+    if ($semJanela -ge 2) { break }
+  } else {
+    # nao foi possivel detectar a janela: usa o fim dos processos do navegador
+    if (-not (Processos-DoPerfil $Perfil)) { break }
+  }
+}
+
+Escrever 'Janela do simulador fechada. Desligando a calculadora...'
+Processos-DoPerfil $Perfil | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force } catch {} }
+Parar-Calculadora
+Escrever 'Simulador encerrado.'

@@ -90,6 +90,8 @@ jobs:
           path: dist
       - name: Instalar e iniciar como um usuário faria
         shell: pwsh
+        env:
+          SIMULADOR_SEM_NAVEGADOR: '1'
         run: |
           Expand-Archive dist/Simulador-RTC-Windows.zip -DestinationPath C:\teste
           $cfg = Get-Content 'C:\teste\Simulador-RTC\config.json' -Raw | ConvertFrom-Json
@@ -102,6 +104,34 @@ jobs:
           $v = Invoke-RestMethod http://localhost:8765/api/calculadora/dados-abertos/versao
           Write-Host "Calculadora no Windows: $($v.versaoApp) / $($v.versaoDb)"
           powershell -NoProfile -ExecutionPolicy Bypass -File 'C:\teste\Simulador-RTC\scripts\encerrar.ps1'
+      - name: Fechar a janela do simulador desliga a calculadora
+        shell: pwsh
+        run: |
+          $url = 'http://localhost:8765/api/calculadora/dados-abertos/versao'
+          $lancador = Start-Process powershell -PassThru -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','C:\teste\Simulador-RTC\scripts\iniciar.ps1'
+          $ok = $false
+          for ($i = 0; $i -lt 60; $i++) { Start-Sleep 2; try { Invoke-RestMethod $url -TimeoutSec 3 | Out-Null; $ok = $true; break } catch {} }
+          if (-not $ok) { Get-Content C:\teste\Simulador-RTC\logs\*; throw 'Calculadora não subiu' }
+          $perfil = 'C:\teste\Simulador-RTC\perfil-navegador'
+          $nav = $null
+          for ($i = 0; $i -lt 30; $i++) {
+            Start-Sleep 2
+            $nav = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($perfil) }
+            if ($nav) { break }
+          }
+          if (-not $nav) { throw 'Janela do simulador não abriu' }
+          Write-Host "Navegador aberto: $(($nav | Select-Object -First 1).Name)"
+          Start-Sleep 10
+          # simula o usuário fechando a janela
+          $nav | ForEach-Object { $gp = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue; if ($gp) { $gp.CloseMainWindow() | Out-Null } }
+          Start-Sleep 3
+          Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($perfil) } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+          $desligou = $false
+          for ($i = 0; $i -lt 30; $i++) { Start-Sleep 2; try { Invoke-RestMethod $url -TimeoutSec 2 | Out-Null } catch { $desligou = $true; break } }
+          if (-not $desligou) { throw 'A calculadora continuou ligada depois de fechar a janela' }
+          if (-not $lancador.WaitForExit(30000)) { throw 'O lançador não terminou' }
+          Write-Host 'OK: fechar a janela desligou a calculadora'
 
   publicar:
     needs: [montar, testar-windows]

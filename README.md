@@ -11,7 +11,8 @@ impacto em receita líquida e margem, reajuste de preço necessário e as incons
 Não precisa de Python, Git nem Java.
 
 1. Baixe `Simulador-RTC-Windows.zip` em [Releases](https://github.com/lucassouzafigueredo/CalculadoraReceita/releases/latest) e extraia.
-2. Dois cliques em **Iniciar Simulador.bat**. O navegador abre sozinho.
+2. Dois cliques em **Iniciar Simulador.bat**. O simulador abre numa janela própria (Edge ou Chrome);
+   ao fechar essa janela a calculadora é desligada automaticamente.
 3. Baixe a planilha-modelo na tela, preencha, envie e clique em **Calcular**.
 4. **Exportar Excel** gera: Resumo por ano, visões por SKU/cliente/canal/UF/cClassTrib,
    itens detalhados, inconsistências, premissas e metadados da versão da calculadora.
