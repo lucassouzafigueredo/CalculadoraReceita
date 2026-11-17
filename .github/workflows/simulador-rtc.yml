@@ -1,0 +1,134 @@
+name: Simulador RTC - pacote Windows
+
+# Todo dia verifica se a calculadora oficial da Receita mudou. Se mudou (ou se o
+# simulador mudou), monta o pacote, testa no Linux e no Windows e publica um Release.
+# O lançador instalado nas máquinas consulta o último Release e se atualiza sozinho.
+on:
+  schedule:
+    - cron: '17 9 * * *'   # 06:17 em Brasília
+  workflow_dispatch:
+    inputs:
+      forcar:
+        description: 'Publicar mesmo sem mudanças'
+        type: boolean
+        default: false
+  push:
+    paths:
+      - 'web/**'
+      - 'pacote/**'
+      - 'scripts/**'
+      - '.github/workflows/simulador-rtc.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: simulador-rtc
+  cancel-in-progress: false
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    outputs:
+      precisa: ${{ steps.v.outputs.precisa }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          COMMIT=$(git ls-remote https://github.com/ReceitaFederal/calculadora-rtc-regime-regular.git refs/heads/main | cut -c1-7)
+          HASH=$(git ls-tree HEAD web pacote scripts | sha1sum | cut -c1-7)
+          echo "Calculadora oficial: $COMMIT | simulador: $HASH"
+          if gh release list --limit 200 --json tagName -q '.[].tagName' | grep -q -- "-${COMMIT}-s${HASH}$" \
+             && [ "${{ github.event.inputs.forcar }}" != "true" ]; then
+            echo "Nada mudou desde o último pacote."
+            echo "precisa=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "precisa=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  montar:
+    needs: verificar
+    if: needs.verificar.outputs.precisa == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Testes de regras
+        run: node scripts/teste_regras.js
+      - name: Instalar Playwright (teste de tela)
+        run: |
+          cd scripts
+          npm init -y > /dev/null
+          npm install --no-save playwright@1.48.2
+          npx playwright install --with-deps chromium
+      - name: Montar e testar pacote
+        env:
+          E2E: '1'
+          NODE_PATH: ${{ github.workspace }}/scripts/node_modules
+        run: scripts/montar_pacote.sh dist main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pacote
+          path: dist/
+          retention-days: 7
+
+  testar-windows:
+    needs: montar
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pacote
+          path: dist
+      - name: Instalar e iniciar como um usuário faria
+        shell: pwsh
+        run: |
+          Expand-Archive dist/Simulador-RTC-Windows.zip -DestinationPath C:\teste
+          $cfg = Get-Content 'C:\teste\Simulador-RTC\config.json' -Raw | ConvertFrom-Json
+          $cfg.verificar_atualizacao = $false
+          $cfg | ConvertTo-Json | Set-Content 'C:\teste\Simulador-RTC\config.json'
+          powershell -NoProfile -ExecutionPolicy Bypass -File 'C:\teste\Simulador-RTC\scripts\iniciar.ps1'
+          if ($LASTEXITCODE -ne 0) { Get-Content C:\teste\Simulador-RTC\logs\* ; exit 1 }
+          $html = Invoke-WebRequest -UseBasicParsing http://localhost:8765/api/simulador.html
+          if ($html.Content -notmatch 'Simulador') { throw 'Tela não publicada' }
+          $v = Invoke-RestMethod http://localhost:8765/api/calculadora/dados-abertos/versao
+          Write-Host "Calculadora no Windows: $($v.versaoApp) / $($v.versaoDb)"
+          powershell -NoProfile -ExecutionPolicy Bypass -File 'C:\teste\Simulador-RTC\scripts\encerrar.ps1'
+
+  publicar:
+    needs: [montar, testar-windows]
+    # só publica a partir do branch principal; em outros branches o fluxo apenas monta e testa
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: pacote
+          path: dist
+      - name: Publicar Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          source dist/pacote.env
+          {
+            echo "Pacote do Simulador da Reforma Tributária montado com a calculadora oficial da Receita Federal."
+            echo
+            echo "**Primeira instalação:** baixe \`Simulador-RTC-Windows.zip\`, extraia e dê dois cliques em \`Iniciar Simulador.bat\`."
+            echo "Quem já tem o simulador instalado recebe esta versão automaticamente ao abrir."
+            echo
+            echo '```json'; cat dist/versao.json; echo '```'
+            echo
+            echo "### Novidades da calculadora oficial"
+            cat dist/notas.md
+          } > dist/corpo.md
+          gh release create "$PACOTE" dist/Simulador-RTC-Windows.zip dist/atualizacao-simulador-rtc.zip dist/versao.json \
+            --title "Simulador RTC $PACOTE" --notes-file dist/corpo.md --target "$GITHUB_SHA" --latest

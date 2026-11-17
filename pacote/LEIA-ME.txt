@@ -1,0 +1,29 @@
+SIMULADOR DA REFORMA TRIBUTÁRIA (CBS / IBS / IS)
+================================================
+
+Não precisa instalar nada (Java já vem dentro da pasta "jre").
+
+COMO USAR
+1. Extraia o .zip para uma pasta sua (ex.: Documentos\Simulador-RTC).
+   Não rode de dentro do .zip.
+2. Dê dois cliques em "Iniciar Simulador.bat".
+   - Na primeira vez o Windows pode mostrar "O Windows protegeu o computador":
+     clique em "Mais informações" > "Executar assim mesmo".
+   - O navegador abre sozinho em http://localhost:8765/api/simulador.html
+3. Na tela: baixe a planilha-modelo, preencha, envie e clique em Calcular.
+4. Para desligar: "Encerrar Simulador.bat".
+
+ATUALIZAÇÃO AUTOMÁTICA
+Toda vez que você abre o simulador ele verifica se há versão nova (gerada
+automaticamente quando a Receita Federal atualiza a calculadora oficial no
+GitHub) e se atualiza sozinho. Sem internet, abre a versão já instalada.
+A versão em uso aparece no topo da tela e na aba "Metadados" do Excel exportado.
+
+PROBLEMAS
+- "A calculadora não respondeu": outra aplicação pode estar usando a porta 8765.
+  Abra config.json no Bloco de Notas e troque "porta" (ex.: 8780).
+- Detalhes técnicos ficam na pasta "logs".
+
+Tudo roda no seu computador: a planilha não é enviada para a internet.
+Motor de cálculo: github.com/ReceitaFederal/calculadora-rtc-regime-regular (licença MIT).
+Simulação gerencial; não substitui a apuração fiscal.

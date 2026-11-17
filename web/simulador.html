@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulador Reforma Tributária</title>
+<link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+<header class="topo">
+  <div class="topo-conteudo">
+    <div>
+      <h1>Simulador da Reforma Tributária</h1>
+      <p class="sub">CBS, IBS e Imposto Seletivo (LC 214/2025) com o motor oficial da Receita Federal</p>
+    </div>
+    <div class="versao" id="versao">
+      <span class="ponto" id="status-ponto"></span>
+      <span id="status-texto">Conectando à calculadora…</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- 1. Modelo -->
+  <section class="cartao">
+    <h2><span class="passo">1</span> Baixe a planilha-modelo</h2>
+    <p>Preencha uma linha por item vendido. A aba <b>Instrucoes</b> explica cada coluna e a aba <b>Tabelas</b> traz as classificações tributárias (cClassTrib) vigentes na versão atual da calculadora.</p>
+    <button class="botao" id="btn-modelo">Baixar planilha-modelo</button>
+  </section>
+
+  <!-- 2. Premissas -->
+  <section class="cartao">
+    <h2><span class="passo">2</span> Confira as premissas de alíquota por ano</h2>
+    <p>Em 2026 a calculadora usa as alíquotas oficiais de teste (CBS 0,9% e IBS 0,1%), compensáveis com PIS/COFINS. De 2027 em diante a lei exige que as alíquotas sejam informadas: os valores abaixo são <b>estimativas editáveis</b>. Se a planilha enviada tiver a aba <b>Premissas</b>, ela substitui esta tabela.</p>
+    <div class="tabela-rolagem">
+      <table class="tabela" id="tab-premissas"></table>
+    </div>
+    <button class="botao secundario" id="btn-premissas-padrao">Restaurar padrão</button>
+  </section>
+
+  <!-- 3. Upload -->
+  <section class="cartao">
+    <h2><span class="passo">3</span> Envie a planilha preenchida</h2>
+    <label class="soltar" id="soltar">
+      <input type="file" id="arquivo" accept=".xlsx,.xls,.csv">
+      <span id="soltar-texto">Clique ou arraste a planilha aqui (.xlsx)</span>
+    </label>
+    <div id="validacao"></div>
+    <div id="area-calculo" hidden>
+      <h3>Anos a simular</h3>
+      <div class="anos" id="anos"></div>
+      <button class="botao" id="btn-calcular">Calcular</button>
+      <div class="progresso" id="progresso" hidden>
+        <div class="barra"><div id="barra"></div></div>
+        <span id="progresso-texto"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Resultados -->
+  <section class="cartao" id="resultados" hidden>
+    <div class="linha-titulo">
+      <h2><span class="passo">4</span> Resultados</h2>
+      <div class="controles">
+        <label>Ano <select id="sel-ano"></select></label>
+        <button class="botao" id="btn-exportar">Exportar Excel</button>
+      </div>
+    </div>
+    <div class="kpis" id="kpis"></div>
+    <p class="nota" id="nota-premissa"></p>
+
+    <h3>Carga tributária por ano (% da receita bruta)</h3>
+    <div class="grafico"><canvas id="graf-anos"></canvas></div>
+
+    <div class="linha-titulo">
+      <h3>Impacto por dimensão</h3>
+      <label>Agrupar por
+        <select id="sel-dim">
+          <option value="sku">SKU</option>
+          <option value="cliente">Cliente</option>
+          <option value="canal">Canal</option>
+          <option value="uf">UF</option>
+          <option value="cclasstrib">cClassTrib</option>
+          <option value="id_operacao">Operação</option>
+        </select>
+      </label>
+    </div>
+    <div class="tabela-rolagem alta"><table class="tabela" id="tab-dim"></table></div>
+
+    <h3>Itens com inconsistência</h3>
+    <div class="tabela-rolagem alta"><table class="tabela" id="tab-erros"></table></div>
+  </section>
+
+  <footer class="rodape">
+    Motor de cálculo: <a href="https://github.com/ReceitaFederal/calculadora-rtc-regime-regular" target="_blank" rel="noopener">calculadora-rtc-regime-regular</a> (Receita Federal, licença MIT).
+    Simulação gerencial de primeira ordem; não substitui a apuração fiscal.
+    <span id="versao-pacote"></span>
+  </footer>
+</main>
+
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="vendor/chart.umd.js"></script>
+<script src="js/regras.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

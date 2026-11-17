@@ -1,0 +1,6 @@
+{
+  "porta": 8765,
+  "verificar_atualizacao": true,
+  "url_atualizacao": "https://api.github.com/repos/lucassouzafigueredo/CalculadoraReceita/releases/latest",
+  "arquivo_atualizacao": "atualizacao-simulador-rtc.zip"
+}
