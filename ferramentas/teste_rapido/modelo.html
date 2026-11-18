@@ -189,7 +189,7 @@ ol{margin:4px 0 8px;padding-left:0;list-style:none}ol li{margin-bottom:5px}
   }
 
   function detalhe(k, e, res, ano, P) {
-    const rac = R.racional(res, premissas);
+    const rac = R.racional(res, premissas, [ano]);
     const c = res.sugestao.classificacao;
     const passos = rac.passos.map((p) => p.replace('premissas editáveis do passo 2 da tela', 'premissas do painel ao lado'));
     const ax = c ? anexoTxt(res, c.codigo) : '';

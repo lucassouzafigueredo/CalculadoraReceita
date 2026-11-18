@@ -36,6 +36,7 @@
     <textarea id="desc-codigos" rows="5" placeholder="02013000&#10;10063021;Arroz 5kg&#10;33051000&#10;122011200"></textarea>
     <div class="controles linha-acoes">
       <label class="botao secundario arquivo-inline">ou envie uma planilha com a coluna ncm<input type="file" id="desc-arquivo" accept=".xlsx,.xls,.csv"></label>
+      <label>Alíquota do ano <select id="desc-ano"></select></label>
       <button class="botao" id="btn-descobrir">Descobrir</button>
     </div>
     <div class="progresso" id="desc-progresso" hidden><div class="barra"><div id="desc-barra"></div></div><span id="desc-texto"></span></div>
@@ -44,7 +45,7 @@
         <h3>Resultado</h3>
         <button class="botao" id="btn-desc-exportar">Baixar planilha preenchida</button>
       </div>
-      <p class="nota">Situação: <b>Automática</b> = um único enquadramento geral · <b>Revisar</b> = há mais de uma possibilidade (abra o racional) · <b>Integral</b> = fora dos anexos de redução. Alíquotas efetivas usam as premissas do passo 2.</p>
+      <p class="nota">Situação: <b>Automática</b> = um único enquadramento geral · <b>Revisar</b> = há mais de uma possibilidade (abra o racional) · <b>Integral</b> = fora dos anexos de redução. Alíquota efetiva do ano escolhido acima, com as premissas do passo 2 (2026 = alíquotas oficiais de teste). A planilha baixada traz todos os anos.</p>
       <div id="desc-lista"></div>
     </div>
   </section>

@@ -143,6 +143,7 @@
       if (!el.dataset.c) return;
       const n = R.numero(el.value);
       estado.premissas[+el.dataset.i][el.dataset.c] = n === null || Number.isNaN(n) ? 0 : n;
+      if (estado.descobertas.length) renderDescobertas();
     });
     $('arquivo').addEventListener('change', (e) => e.target.files[0] && lerArquivo(e.target.files[0]));
     const zona = $('soltar');
@@ -156,6 +157,8 @@
     $('btn-descobrir').addEventListener('click', () => descobrirCodigos(lerCodigosColados($('desc-codigos').value)));
     $('desc-arquivo').addEventListener('change', (e) => e.target.files[0] && descobrirDaPlanilha(e.target.files[0]));
     $('btn-desc-exportar').addEventListener('click', exportarDescobertas);
+    $('desc-ano').innerHTML = R.ANOS.map((a) => `<option value="${a}" ${a === 2027 ? 'selected' : ''}>${a}</option>`).join('');
+    $('desc-ano').addEventListener('change', () => { if (estado.descobertas.length) renderDescobertas(); });
   }
 
   // ---------------- planilha-modelo ----------------
@@ -697,25 +700,26 @@
   const prem = (ano) => estado.premissas.find((p) => p.ano === ano);
 
   function renderDescobertas() {
+    const anoDesc = Number($('desc-ano').value) || 2027;
     const lista = [...estado.descobertas].sort((a, b) => ORDEM_SITUACAO[a.erro ? 'ERRO' : a.sugestao.situacao] - ORDEM_SITUACAO[b.erro ? 'ERRO' : b.sugestao.situacao]);
     const resumo = {};
     lista.forEach((r) => { const k = r.erro ? 'ERRO' : r.sugestao.situacao; resumo[k] = (resumo[k] || 0) + 1; });
     let h = `<p>${lista.length} código(s): ${Object.entries(resumo).map(([k, v]) => `<span class="etiqueta ${k}">${ROTULO_SITUACAO[k]} ${v}</span>`).join(' ')}</p>`;
     lista.forEach((r) => {
       const situ = r.erro ? 'ERRO' : r.sugestao.situacao;
-      const rac = R.racional(r, estado.premissas);
+      const rac = R.racional(r, estado.premissas, [anoDesc]);
       const c = r.erro ? null : r.sugestao.classificacao;
-      const ef = r.erro ? null : R.aliquotaEfetiva(c, prem(2033));
+      const ef = r.erro ? null : R.aliquotaEfetiva(c, prem(anoDesc));
       h += `<details class="desc-item" ${situ === 'REVISAR' || situ === 'ERRO' ? 'open' : ''}><summary>
         <span class="desc-cod">${esc(r.codigo)}<div class="desc-sub">${esc(r.tipo)}</div></span>
         <span>${esc(r.descricao || r.rotulo || '')}${r.rotulo && r.descricao ? `<div class="desc-sub">${esc(r.rotulo)}</div>` : ''}</span>
         <span>${r.erro ? '–' : `cClassTrib <b>${r.sugestao.codigo}</b><div class="desc-sub">CST ${r.sugestao.cst} · redução ${fmtN.format(c ? c.percentualReducaoCbs : 0)}%</div>`}</span>
-        <span>${r.erro ? '' : `Efetiva 2033 <b>${fmtP(ef)}</b><div class="desc-sub">${r.is ? 'Sujeito ao IS' : 'Sem IS'}</div>`}</span>
+        <span>${r.erro ? '' : `Efetiva ${anoDesc} <b>${fmtP(ef)}</b><div class="desc-sub">${r.is ? 'Sujeito ao IS' : 'Sem IS'}</div>`}</span>
         <span class="etiqueta ${situ}">${ROTULO_SITUACAO[situ]}</span>
       </summary><div class="desc-corpo"><b>Racional</b><ol>${rac.passos.map((p) => `<li>${esc(p)}</li>`).join('')}</ol>`;
       if (rac.alternativas.length) {
-        h += '<b>Alternativas</b><div class="tabela-rolagem"><table class="tabela"><thead><tr><th>cClassTrib</th><th>CST</th><th>Descrição</th><th class="num">Redução</th><th class="num">Efetiva 2033</th><th>Base legal</th><th>Por que não foi a sugerida</th></tr></thead><tbody>' +
-          rac.alternativas.map((a) => `<tr><td>${a.codigo}</td><td>${a.cst}</td><td>${esc(a.descricao)}</td><td class="num">${fmtN.format(a.reducao)}%</td><td class="num">${fmtP(a.efetiva_2033)}</td><td>${esc(a.base_legal)}</td><td>${esc(a.motivo)}</td></tr>`).join('') +
+        h += `<b>Alternativas</b><div class="tabela-rolagem"><table class="tabela"><thead><tr><th>cClassTrib</th><th>CST</th><th>Descrição</th><th class="num">Redução</th><th class="num">Efetiva ${anoDesc}</th><th>Base legal</th><th>Por que não foi a sugerida</th></tr></thead><tbody>` +
+          rac.alternativas.map((a) => `<tr><td>${a.codigo}</td><td>${a.cst}</td><td>${esc(a.descricao)}</td><td class="num">${fmtN.format(a.reducao)}%</td><td class="num">${fmtP(a.efetiva)}</td><td>${esc(a.base_legal)}</td><td>${esc(a.motivo)}</td></tr>`).join('') +
           '</tbody></table></div>';
       }
       h += '</div></details>';
@@ -725,21 +729,21 @@
   }
 
   function abasRacional(wb) {
-    const rac = [['tipo', 'codigo', 'descricao_oficial', 'descricao_informada', 'situacao', 'cclasstrib_sugerida', 'cst', 'tratamento', 'reducao_cbs_%', 'reducao_ibs_uf_%', 'reducao_ibs_mun_%', 'aliquota_efetiva_2027_%', 'aliquota_efetiva_2033_%', 'base_legal', 'imposto_seletivo', 'credito_adquirente', 'racional']];
+    const rac = [['tipo', 'codigo', 'descricao_oficial', 'descricao_informada', 'situacao', 'cclasstrib_sugerida', 'cst', 'tratamento', 'reducao_cbs_%', 'reducao_ibs_uf_%', 'reducao_ibs_mun_%', ...R.ANOS.map((a) => `aliquota_efetiva_${a}_%`), 'base_legal', 'imposto_seletivo', 'credito_adquirente', 'racional']];
     const alt = [['tipo', 'codigo', 'cclasstrib_sugerida', 'alternativa', 'cst', 'descricao', 'reducao_%', 'aliquota_efetiva_2033_%', 'base_legal', 'por_que_nao_foi_a_sugerida']];
     estado.descobertas.forEach((r) => {
-      const x = R.racional(r, estado.premissas);
-      if (r.erro) { rac.push([r.tipo, r.codigo, '', r.rotulo, 'ERRO', '', '', '', '', '', '', '', '', '', '', '', x.passos.join('\n')]); return; }
+      const x = R.racional(r, estado.premissas, R.ANOS);
+      if (r.erro) { rac.push([r.tipo, r.codigo, '', r.rotulo, 'ERRO', '', '', '', '', '', '', ...R.ANOS.map(() => ''), '', '', '', x.passos.join('\n')]); return; }
       const c = r.sugestao.classificacao;
       const ef = (a) => { const v = R.aliquotaEfetiva(c, prem(a)); return v === null ? '' : R.r2(v * 100) / 100; };
       rac.push([r.tipo, r.codigo, r.descricao, r.rotulo, ROTULO_SITUACAO[r.sugestao.situacao], r.sugestao.codigo, r.sugestao.cst, c ? c.descricaoTratamentoTributario : 'Tributação integral',
-        c ? c.percentualReducaoCbs : 0, c ? c.percentualReducaoIbsUf : 0, c ? c.percentualReducaoIbsMun : 0, ef(2027), ef(2033),
+        c ? c.percentualReducaoCbs : 0, c ? c.percentualReducaoIbsUf : 0, c ? c.percentualReducaoIbsMun : 0, ...R.ANOS.map(ef),
         c && c._fund ? `${c._fund.textoCurto} – ${c._fund.texto}` : 'LC 214/2025 (regra geral)', r.is ? 'Sim' : 'Não',
         c ? `CBS ${c.indicaApropriacaoCreditoAdquirenteCbs ? 'sim' : 'não'} / IBS ${c.indicaApropriacaoCreditoAdquirenteIbs ? 'sim' : 'não'}` : '', x.passos.join('\n')]);
-      x.alternativas.forEach((a) => alt.push([r.tipo, r.codigo, r.sugestao.codigo, a.codigo, a.cst, a.descricao, a.reducao, a.efetiva_2033, a.base_legal, a.motivo]));
+      x.alternativas.forEach((a) => alt.push([r.tipo, r.codigo, r.sugestao.codigo, a.codigo, a.cst, a.descricao, a.reducao, a.efetiva, a.base_legal, a.motivo]));
     });
     const wsR = XLSX.utils.aoa_to_sheet(rac);
-    wsR['!cols'] = [6, 11, 50, 25, 11, 12, 6, 25, 9, 9, 9, 11, 11, 60, 8, 18, 120].map((w) => ({ wch: w }));
+    wsR['!cols'] = [6, 11, 50, 25, 11, 12, 6, 25, 9, 9, 9, ...R.ANOS.map(() => 11), 60, 8, 18, 120].map((w) => ({ wch: w }));
     XLSX.utils.book_append_sheet(wb, wsR, 'Racional_cClassTrib');
     const wsA = XLSX.utils.aoa_to_sheet(alt);
     wsA['!cols'] = [6, 11, 12, 11, 6, 70, 10, 12, 12, 70].map((w) => ({ wch: w }));

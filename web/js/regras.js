@@ -128,8 +128,13 @@
   }
 
   /** Alíquota efetiva estimada (%) = alíquota nominal da premissa x (1 - redução). */
+  // alíquotas oficiais de teste de 2026 (tabela ALIQUOTA_REFERENCIA da calculadora)
+  const TESTE_2026 = { cbs: 0.9, ibs_uf: 0.1, ibs_mun: 0 };
+  function premEfetiva(prem) { return prem && prem.cbs === null ? { ...prem, ...TESTE_2026 } : prem; }
+
   function aliquotaEfetiva(classif, prem) {
-    if (!prem || prem.cbs === null) return null;
+    prem = premEfetiva(prem);
+    if (!prem || prem.cbs === null || prem.cbs === undefined) return null;
     const red = (k) => (classif ? (classif[k] || 0) : 0) / 100;
     return prem.cbs * (1 - red('percentualReducaoCbs')) + prem.ibs_uf * (1 - red('percentualReducaoIbsUf')) + prem.ibs_mun * (1 - red('percentualReducaoIbsMun'));
   }
@@ -147,10 +152,11 @@
   /** Conta da alíquota efetiva, por extenso. */
   function contaAliquota(classif, prem) {
     if (!prem) return '';
-    if (prem.cbs === null) return `${prem.ano}: alíquotas oficiais de teste definidas pela calculadora (CBS 0,9% / IBS 0,1%), compensáveis com PIS/COFINS.`;
+    const teste = prem.cbs === null;
+    prem = premEfetiva(prem);
     const r = (k) => (classif ? classif[k] || 0 : 0);
     const ef = aliquotaEfetiva(classif, prem);
-    return `${prem.ano}: CBS ${fmt(prem.cbs)}% × (1 − ${fmt(r('percentualReducaoCbs'))}%) + IBS UF ${fmt(prem.ibs_uf)}% × (1 − ${fmt(r('percentualReducaoIbsUf'))}%) + IBS Mun ${fmt(prem.ibs_mun)}% × (1 − ${fmt(r('percentualReducaoIbsMun'))}%) = ${fmt(Math.round(ef * 10000) / 10000)}%`;
+    return `${prem.ano}: CBS ${fmt(prem.cbs)}% × (1 − ${fmt(r('percentualReducaoCbs'))}%) + IBS UF ${fmt(prem.ibs_uf)}% × (1 − ${fmt(r('percentualReducaoIbsUf'))}%) + IBS Mun ${fmt(prem.ibs_mun)}% × (1 − ${fmt(r('percentualReducaoIbsMun'))}%) = ${fmt(Math.round(ef * 10000) / 10000)}%${teste ? ' (alíquotas oficiais de teste de 2026, compensáveis com PIS/COFINS)' : ''}`;
   }
 
   /**
@@ -158,7 +164,8 @@
    * res: { tipo, codigo, descricao, testadas, aceitas:[classif], sugestao, is, erro }
    * premissas: lista de premissas por ano (usa 2027 e 2033).
    */
-  function racional(res, premissas) {
+  function racional(res, premissas, anos = [2027, 2033]) {
+    const anoRef = anos[anos.length - 1];
     if (res.erro) return { passos: [`${res.tipo} ${res.codigo}: ${res.erro}. Confira o código.`], alternativas: [] };
     const sug = res.sugestao;
     const c = sug.classificacao;
@@ -180,19 +187,19 @@
     const f = c && c._fund;
     passos.push(`4. Base legal (LC 214/2025): ${f ? (String(f.texto || '').startsWith(f.textoCurto) ? f.texto : `${f.textoCurto} – ${f.texto}`) : 'regra geral, sem redução.'}`);
     passos.push(`5. Redução: CBS ${fmt(c ? c.percentualReducaoCbs : 0)}% · IBS UF ${fmt(c ? c.percentualReducaoIbsUf : 0)}% · IBS Mun ${fmt(c ? c.percentualReducaoIbsMun : 0)}%.`);
-    passos.push(`6. Alíquota efetiva estimada (alíquotas nominais = premissas editáveis do passo 2 da tela): ${[contaAliquota(c, pAno(2027)), contaAliquota(c, pAno(2033))].filter(Boolean).join(' | ')}.`);
+    passos.push(`6. Alíquota efetiva (alíquotas nominais = premissas editáveis do passo 2 da tela): ${anos.map((a) => contaAliquota(c, pAno(a))).filter(Boolean).join(' | ')}.`);
     if (c) passos.push(`7. Crédito para o comprador: CBS ${c.indicaApropriacaoCreditoAdquirenteCbs ? 'sim' : 'não'} · IBS ${c.indicaApropriacaoCreditoAdquirenteIbs ? 'sim' : 'não'}.`);
     if (res.is) passos.push(`8. Imposto Seletivo: o cadastro oficial marca este produto como sujeito ao IS (CST ${res.is.cst} / cClassTrib ${res.is.cclasstrib}). ${res.is.aliquota !== null ? `Alíquota ad valorem ${fmt(res.is.aliquota)}%.` : 'A alíquota ainda não está definida na calculadora: informe is_aliquota para simular.'}`);
     const alternativas = sug.alternativas.map((a) => ({
       codigo: a.codigo, cst: a.codigo.slice(0, 3), descricao: a.descricao,
       reducao: a.percentualReducaoCbs || 0,
-      efetiva_2033: arred4(aliquotaEfetiva(a, pAno(2033))),
+      efetiva: arred4(aliquotaEfetiva(a, pAno(anoRef))), ano_efetiva: anoRef,
       base_legal: a._fund ? a._fund.textoCurto : '',
       motivo: motivoAlternativa(a, c),
     }));
     if (c && sug.codigo !== '000001') {
       alternativas.push({ codigo: '000001', cst: '000', descricao: 'Tributação integral (sem redução)', reducao: 0,
-        efetiva_2033: arred4(aliquotaEfetiva(null, pAno(2033))), base_legal: 'LC 214/2025', motivo: 'Só se o produto não se enquadrar na descrição do anexo.' });
+        efetiva: arred4(aliquotaEfetiva(null, pAno(anoRef))), ano_efetiva: anoRef, base_legal: 'LC 214/2025', motivo: 'Só se o produto não se enquadrar na descrição do anexo.' });
     }
     return { passos, alternativas };
   }
