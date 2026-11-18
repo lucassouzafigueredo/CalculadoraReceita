@@ -141,3 +141,5 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 13px; backgrou
 .cen-nota, .cen-lei { grid-column: 1 / -1; font-size: 13px; }
 .cen-lei summary { cursor: pointer; color: var(--destaque); font-size: 12px; }
 @media (max-width: 700px) { .cen { grid-template-columns: 1fr; } }
+.cen-disp { background: var(--linha-par); border-radius: 6px; padding: 8px 10px; }
+.cen-lei hr { border: 0; border-top: 1px solid var(--borda); }

@@ -209,7 +209,8 @@ ol{margin:4px 0 8px;padding-left:0;list-style:none}ol li{margin-bottom:5px}
     const cart = (t, c, cl) => `<div class="cen ${cl}"><div class="cen-tit">${t}</div><div><b>Vale quando</b><ul>${c.enquadra.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` +
       (c.nao.length ? `<div><b>Não vale quando</b><ul>${c.nao.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '') +
       (c.efeito ? `<div class="cen-nota"><b>Efeito:</b> ${esc(c.efeito)}</div>` : '') + (c.fonte ? `<div class="cen-nota">${esc(c.fonte)}</div>` : '') +
-      `<details class="cen-nota"><summary>Base legal completa</summary>${esc(c.baseLegal)}</details></div>`;
+      (c.dispositivo ? `<div class="cen-nota" style="background:var(--par);padding:6px 8px;border-radius:6px"><b>Dispositivo citado (${esc(c.referencia)}, texto consolidado):</b><br>${esc(c.dispositivo).replace(/\n/g, '<br>')}</div>` : '') +
+      `<details class="cen-nota"><summary>Base legal completa${c.relacionados && c.relacionados.length ? ` e artigos relacionados (art. ${c.relacionados.map((x) => x.numero).join(', ')})` : ''}</summary>${esc(c.baseLegal).replace(/\n/g, '<br>')}${(c.relacionados || []).map((x) => `<hr>${esc(x.texto).replace(/\n/g, '<br>')}`).join('')}</details></div>`;
     if (rac.alternativas.length || res.sugestao.situacao !== 'INTEGRAL') {
       h += '<b>Quando cada opção vale</b><div class="cens">' + cart(`Sugerida: ${res.sugestao.codigo}`, rac.cenarioSugerida, 'sug') +
         rac.alternativas.map((a) => cart(`Alternativa: ${a.codigo} · efetiva ${pct(R.aliquotaEfetiva(M.classes.get(a.codigo) || null, P))}`, a.cenarios, 'alt')).join('') + '</div>';

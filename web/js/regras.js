@@ -143,30 +143,70 @@
   const fmt = (n) => (n === null || n === undefined ? '–' : n.toLocaleString('pt-BR', { maximumFractionDigits: 4 }));
 
   // Complementos onde os dados oficiais da calculadora não detalham a condição (texto legal truncado no banco).
+  // Condições que não estão em campos estruturados da calculadora; redigidas a partir do texto consolidado
+  // da LC 214/2025, art. 138 (portal Normas do Senado), exibido junto no cartão.
+  const FONTE_138 = 'LC 214/2025, art. 138, §§ 1º a 9º (texto consolidado do portal Normas do Senado; íntegra em "Base legal completa").';
   const CENARIOS_EXTRA = {
     '515001': {
       enquadra: [
-        'Operação com insumo agropecuário/aquícola do Anexo IX em uma das hipóteses de diferimento do art. 138, § 2º da LC 214/2025:',
-        'Fornecimento feito por contribuinte do regime regular do IBS/CBS a outro contribuinte do regime regular ou a produtor rural não contribuinte;',
-        'Importação feita por contribuinte do regime regular ou por produtor rural não contribuinte.',
-        'Para produtor rural não contribuinte, o diferimento só alcança a parcela dos insumos usada na produção de bem vendido (§ 3º).',
+        'Insumo do Anexo IX registrado no Ministério da Agricultura e Pecuária, quando o registro for exigido (§ 1º).',
+        'Fornecimento por contribuinte do regime regular do IBS/CBS para: (a) contribuinte do regime regular; ou (b) produtor rural não contribuinte que use os insumos na produção de bem vendido a adquirentes com direito ao crédito presumido do art. 168 (§ 2º, I).',
+        'Importação feita por: (a) contribuinte do regime regular; ou (b) produtor rural não contribuinte nas mesmas condições (§ 2º, II).',
+        'Para o produtor rural não contribuinte, o diferimento alcança só a parcela dos insumos usada na produção vendida a esses adquirentes (§ 3º).',
       ],
       nao: [
-        'Vendedor do Simples Nacional ou MEI (não é regime regular) → use 200038 (redução de 60%, sem diferimento).',
-        'Venda a consumidor final, a empresa do Simples Nacional/MEI ou a não contribuinte que não seja produtor rural → use 200038.',
-        'Produto fora do Anexo IX → tributação integral (000001).',
+        'Vendedor fora do regime regular (Simples Nacional ou MEI) → 200038 (redução de 60%, sem diferimento).',
+        'Comprador consumidor final, empresa do Simples Nacional/MEI, ou produtor rural não contribuinte cuja produção não é vendida a adquirentes com crédito presumido do art. 168 → 200038.',
+        'Insumo sem o registro exigido no Ministério da Agricultura → sem a redução (000001, tributação integral).',
       ],
-      efeito: 'A alíquota é a mesma da 200038 (redução de 60%); muda o momento do recolhimento: o imposto não é pago nesta venda e o diferimento se encerra na etapa seguinte (§ 5º). Impacto de caixa e de crédito, não de alíquota.',
-      fonte: 'Resumo do art. 138, §§ 2º a 5º da LC 214/2025 (o texto completo não consta do banco da calculadora). Confira a redação oficial no Planalto antes de decidir.',
+      efeito: 'Mesma alíquota da 200038 (redução de 60%). O imposto não é recolhido nesta venda: o diferimento termina quando a operação seguinte não estiver alcançada por ele, for isenta, não tributada ou com alíquota zero, ou ocorrer sem documento fiscal (§ 5º), e quem promove essa operação recolhe o imposto (§ 6º). Impacto de caixa, preço e crédito, não de alíquota.',
+      fonte: FONTE_138,
+    },
+    '200038': {
+      enquadra: [
+        'Insumo do Anexo IX registrado no Ministério da Agricultura e Pecuária, quando o registro for exigido (§ 1º).',
+        'Venda fora das hipóteses de diferimento do § 2º: por exemplo, a consumidor final, a empresa do Simples Nacional/MEI, ou por vendedor fora do regime regular.',
+      ],
+      nao: [
+        'Venda por contribuinte do regime regular a outro contribuinte do regime regular, ou a produtor rural não contribuinte que venda a produção a adquirentes com crédito presumido do art. 168 (e importações nessas condições) → 515001 (mesma alíquota, recolhimento diferido).',
+        'Insumo sem o registro exigido no Ministério da Agricultura → sem a redução (000001).',
+      ],
+      efeito: '',
+      fonte: FONTE_138,
     },
   };
 
-  CENARIOS_EXTRA['200038'] = {
-    enquadra: ['Venda fora das hipóteses de diferimento do art. 138, § 2º (ex.: a consumidor final, a empresa do Simples Nacional/MEI ou a não contribuinte que não seja produtor rural).'],
-    nao: ['Venda por contribuinte do regime regular a outro contribuinte do regime regular ou a produtor rural não contribuinte, ou importação nessas condições → use 515001 (mesma alíquota, recolhimento diferido).'],
-    efeito: '',
-    fonte: 'Resumo do art. 138, §§ 2º a 5º da LC 214/2025 (o texto completo não consta do banco da calculadora). Confira a redação oficial no Planalto antes de decidir.',
-  };
+  /** Trecho exato da LC 214 citado na base legal (ex.: "Art. 144, II", "Art. 138, § 2º"), pelo texto consolidado. */
+  function dispositivoLei(textoCurto, cen) {
+    if (!cen || !cen.lei || !textoCurto) return null;
+    const m = String(textoCurto).match(/Art\.?\s*(\d+)(?:-([A-Z]))?(.*)/i);
+    if (!m) return null;
+    const num = (m[1] + (m[2] || '')).toUpperCase();
+    const artigo = cen.lei[num];
+    if (!artigo) return null;
+    const linhas = artigo.split('\n');
+    const resto = m[3] || '';
+    const par = resto.match(/§\s*(\d+)/);
+    const inc = resto.match(/(?:^|,)\s*([IVXL]+)\b/);
+    const ehPar = (l) => /^§\s*\d+/.test(l) || /^Parágrafo único/.test(l);
+    const ehInc = (l) => /^[IVXL]+\s*[–-]/.test(l);
+    let trecho = artigo;
+    if (par) {
+      const ini = linhas.findIndex((l) => new RegExp(`^§\\s*${par[1]}(º|\\.|\\s)`).test(l));
+      if (ini >= 0) { let f = ini + 1; while (f < linhas.length && !ehPar(linhas[f])) f++; trecho = linhas.slice(ini, f).join('\n'); }
+    } else if (inc) {
+      const ini = linhas.findIndex((l) => new RegExp(`^${inc[1]}\\s*[–-]`).test(l));
+      if (ini >= 0) { let f = ini + 1; while (f < linhas.length && !ehInc(linhas[f]) && !ehPar(linhas[f])) f++; trecho = `${linhas[0]}\n${linhas.slice(ini, f).join('\n')}`; }
+    }
+    const relacionados = [];
+    const re = /arts?\.\s*(\d+)[ºo°]?(?:-([A-Z]))?(?:[^.;]{0,60}?)desta Lei Complementar/g;
+    let r;
+    while ((r = re.exec(artigo))) {
+      const n = (r[1] + (r[2] || '')).toUpperCase();
+      if (n !== num && cen.lei[n] && !relacionados.find((x) => x.numero === n)) relacionados.push({ numero: n, texto: cen.lei[n] });
+    }
+    return { referencia: textoCurto, numero: num, artigo, trecho, relacionados };
+  }
 
   function itensDoAnexo(codigo, cc, cen) {
     if (!cen || !codigo) return [];
@@ -211,10 +251,13 @@
       enquadra.push('Sem restrição de comprador ou vendedor nos dados oficiais; vale a descrição da classificação e a base legal.');
     }
     const f = classif && classif._fund;
+    const disp = f ? dispositivoLei(f.textoCurto, cen) : null;
     return {
       codigo: cc, enquadra, nao, efeito: extra ? extra.efeito : '', fonte: extra ? extra.fonte : '',
+      dispositivo: disp ? disp.trecho : '', referencia: f ? f.textoCurto : '',
+      relacionados: disp ? disp.relacionados : [],
       compradores, vendedores, anexo: anexo.map((i) => `Anexo ${i.ax}, item ${i.it}: ${i.tx}`),
-      baseLegal: f ? (String(f.texto || '').startsWith(f.textoCurto) ? f.texto : `${f.textoCurto} – ${f.texto}`) : 'LC 214/2025, regra geral.',
+      baseLegal: disp ? disp.artigo : f ? (String(f.texto || '').startsWith(f.textoCurto) ? f.texto : `${f.textoCurto} – ${f.texto}`) : 'LC 214/2025, regra geral.',
     };
   }
 
@@ -271,7 +314,8 @@
       : 'as únicas opções com benefício dependem do comprador/operação; por prudência foi sugerida a tributação integral';
     passos.push(`3. Sugerida ${sug.codigo} (CST ${sug.cst}${c ? ` – ${c.descricaoTratamentoTributario || c.descricao}` : ' – tributação integral'}) porque ${motivoEscolha}. ${sug.observacao}`);
     const f = c && c._fund;
-    passos.push(`4. Base legal (LC 214/2025): ${f ? (String(f.texto || '').startsWith(f.textoCurto) ? f.texto : `${f.textoCurto} – ${f.texto}`) : 'regra geral, sem redução.'}`);
+    const disp4 = f ? dispositivoLei(f.textoCurto, cen) : null;
+    passos.push(`4. Base legal (LC 214/2025${disp4 ? ', texto consolidado' : ''}): ${disp4 ? `${f.textoCurto} – ${disp4.trecho.replace(/\n/g, ' ')}` : f ? (String(f.texto || '').startsWith(f.textoCurto) ? f.texto : `${f.textoCurto} – ${f.texto}`) : 'regra geral, sem redução.'}`);
     passos.push(`5. Redução: CBS ${fmt(c ? c.percentualReducaoCbs : 0)}% · IBS UF ${fmt(c ? c.percentualReducaoIbsUf : 0)}% · IBS Mun ${fmt(c ? c.percentualReducaoIbsMun : 0)}%.`);
     passos.push(`6. Alíquota efetiva (alíquotas nominais = premissas editáveis do passo 2 da tela): ${anos.map((a) => contaAliquota(c, pAno(a))).filter(Boolean).join(' | ')}.`);
     if (c) passos.push(`7. Crédito para o comprador: CBS ${c.indicaApropriacaoCreditoAdquirenteCbs ? 'sim' : 'não'} · IBS ${c.indicaApropriacaoCreditoAdquirenteIbs ? 'sim' : 'não'}.`);
@@ -617,7 +661,7 @@
 
   const API = {
     ANOS, UFS, PREMISSAS_PADRAO, COLUNAS_PREMISSAS, COLUNAS, EXEMPLOS, LIMITE_ITENS_POR_OPERACAO,
-    normalizarCabecalho, numero, codigo, LOCAL_PADRAO, sugerirClassificacao, aliquotaEfetiva, descricaoNcm, racional, contaAliquota, cenarios, dataISO, dataHoraNoAno, validarLinhas, lerPremissas,
+    normalizarCabecalho, numero, codigo, LOCAL_PADRAO, sugerirClassificacao, aliquotaEfetiva, descricaoNcm, racional, contaAliquota, cenarios, dispositivoLei, dataISO, dataHoraNoAno, validarLinhas, lerPremissas,
     requisicaoBase, chaveBase, temIS, montarOperacoes, lerObjeto, metricas, somar, r2,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;

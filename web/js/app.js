@@ -741,7 +741,9 @@
       (cen.nao.length ? `<div class="cen-col"><b>Não vale quando</b><ul>${cen.nao.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '') +
       (cen.efeito ? `<div class="cen-nota"><b>Efeito:</b> ${esc(cen.efeito)}</div>` : '') +
       (cen.fonte ? `<div class="cen-nota">${esc(cen.fonte)}</div>` : '') +
-      `<details class="cen-lei"><summary>Base legal completa</summary>${esc(cen.baseLegal)}</details></div>`;
+      (cen.dispositivo ? `<div class="cen-nota cen-disp"><b>Dispositivo citado (${esc(cen.referencia)}, texto consolidado):</b><br>${esc(cen.dispositivo).replace(/\n/g, '<br>')}</div>` : '') +
+      `<details class="cen-lei"><summary>Base legal completa${cen.relacionados && cen.relacionados.length ? ` e artigos relacionados (art. ${cen.relacionados.map((x) => x.numero).join(', ')})` : ''}</summary>${esc(cen.baseLegal).replace(/\n/g, '<br>')}` +
+      `${(cen.relacionados || []).map((x) => `<hr>${esc(x.texto).replace(/\n/g, '<br>')}`).join('')}</details></div>`;
     let h = '<b>Quando cada opção vale</b><div class="cens">';
     h += cartao(`Sugerida: ${r.sugestao.codigo}`, rac.cenarioSugerida, 'sug');
     rac.alternativas.forEach((a) => { h += cartao(`Alternativa: ${a.codigo} · efetiva ${fmtP(a.efetiva)}`, a.cenarios, 'alt'); });
@@ -750,7 +752,7 @@
 
   function abasRacional(wb) {
     const rac = [['tipo', 'codigo', 'descricao_oficial', 'descricao_informada', 'situacao', 'cclasstrib_sugerida', 'cst', 'tratamento', 'reducao_cbs_%', 'reducao_ibs_uf_%', 'reducao_ibs_mun_%', ...R.ANOS.map((a) => `aliquota_efetiva_${a}_%`), 'base_legal', 'imposto_seletivo', 'credito_adquirente', 'racional', 'condicoes_da_sugerida']];
-    const alt = [['tipo', 'codigo', 'cclasstrib_sugerida', 'alternativa', 'cst', 'descricao', 'reducao_%', 'aliquota_efetiva_2033_%', 'base_legal', 'por_que_nao_foi_a_sugerida', 'vale_quando', 'nao_vale_quando', 'efeito', 'observacao']];
+    const alt = [['tipo', 'codigo', 'cclasstrib_sugerida', 'alternativa', 'cst', 'descricao', 'reducao_%', 'aliquota_efetiva_2033_%', 'base_legal', 'por_que_nao_foi_a_sugerida', 'vale_quando', 'nao_vale_quando', 'efeito', 'observacao', 'dispositivo_legal']];
     estado.descobertas.forEach((r) => {
       const x = R.racional(r, estado.premissas, R.ANOS, estado.cen);
       if (r.erro) { rac.push([r.tipo, r.codigo, '', r.rotulo, 'ERRO', '', '', '', '', '', '', ...R.ANOS.map(() => ''), '', '', '', x.passos.join('\n'), '']); return; }
@@ -760,7 +762,7 @@
         c ? c.percentualReducaoCbs : 0, c ? c.percentualReducaoIbsUf : 0, c ? c.percentualReducaoIbsMun : 0, ...R.ANOS.map(ef),
         c && c._fund ? `${c._fund.textoCurto} – ${c._fund.texto}` : 'LC 214/2025 (regra geral)', r.is ? 'Sim' : 'Não',
         c ? `CBS ${c.indicaApropriacaoCreditoAdquirenteCbs ? 'sim' : 'não'} / IBS ${c.indicaApropriacaoCreditoAdquirenteIbs ? 'sim' : 'não'}` : '', x.passos.join('\n'), x.cenarioSugerida.enquadra.join('\n')]);
-      x.alternativas.forEach((a) => alt.push([r.tipo, r.codigo, r.sugestao.codigo, a.codigo, a.cst, a.descricao, a.reducao, a.efetiva, a.base_legal, a.motivo, a.cenarios.enquadra.join('\n'), a.cenarios.nao.join('\n'), a.cenarios.efeito, a.cenarios.fonte]));
+      x.alternativas.forEach((a) => alt.push([r.tipo, r.codigo, r.sugestao.codigo, a.codigo, a.cst, a.descricao, a.reducao, a.efetiva, a.base_legal, a.motivo, a.cenarios.enquadra.join('\n'), a.cenarios.nao.join('\n'), a.cenarios.efeito, a.cenarios.fonte, a.cenarios.dispositivo ? `${a.cenarios.referencia}: ${a.cenarios.dispositivo}` : a.cenarios.baseLegal]));
     });
     const wsR = XLSX.utils.aoa_to_sheet(rac);
     wsR['!cols'] = [6, 11, 50, 25, 11, 12, 6, 25, 9, 9, 9, ...R.ANOS.map(() => 11), 60, 8, 18, 120].map((w) => ({ wch: w }));

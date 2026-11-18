@@ -81,9 +81,16 @@ curl -sf "$API/dados-abertos/classificacoes-tributarias/cbs-ibs?data=2027-01-01"
 curl -sf "$API/dados-abertos/fundamentacoes-legais?data=2027-01-01" > "$TRAB/fund.json"
 curl -sf "$API/dados-abertos/versao" > "$TRAB/versao_api.json"
 python3 "$TR/extrair.py" calculadora/db/calculadora-pro.db "$TRAB/cl.json" "$TRAB/fund.json" "$TRAB/versao_api.json" "$TRAB/dados_rapido.json"
+echo ">> Texto consolidado da LC 214 (portal Normas do Senado)"
+if python3 "$TR/lei_senado.py" baixar "$TRAB/lc214.json"; then
+  python3 "$TR/lei_senado.py" mesclar "$TRAB/dados_rapido.json" "$TRAB/lc214.json"
+  export EXIGE_LEI=1
+else
+  echo "   AVISO: não foi possível baixar a LC 214 do Senado; segue com o texto do banco da calculadora"
+fi
 python3 "$TR/montar.py" "$TR/modelo.html" "$TRAB/dados_rapido.json" "$SIM/web/js/regras.js" "$TR/motor_rapido.js" "$SAIDA/teste_rapido_rtc.html"
 cp "$SAIDA/teste_rapido_rtc.html" "$APP/web/teste_rapido_rtc.html"
-python3 -c "import json,sys; d=json.load(open(sys.argv[1])); json.dump({k: d[k] for k in ('atores','trat','regrasNcm','regrasNbs')}, open(sys.argv[2],'w'), ensure_ascii=False, separators=(',',':'))" "$TRAB/dados_rapido.json" "$APP/web/dados_cenarios.json"
+python3 -c "import json,sys; d=json.load(open(sys.argv[1])); json.dump({k: d[k] for k in ('atores','trat','regrasNcm','regrasNbs','lei','leiFonte') if k in d}, open(sys.argv[2],'w'), ensure_ascii=False, separators=(',',':'))" "$TRAB/dados_rapido.json" "$APP/web/dados_cenarios.json"
 if [ -n "${E2E:-}" ]; then node "$TR/conferir.js" "$TRAB/dados_rapido.json" "$API"; fi
 echo ">> Conferindo o modo online (GitHub Pages) contra a calculadora oficial"
 node "$SIM/scripts/conferir_online.js" "$TRAB/dados_rapido.json" "$API" "$TRAB/dados_online.json"

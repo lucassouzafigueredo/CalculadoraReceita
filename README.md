@@ -82,6 +82,12 @@ sozinho), *Integral* (fora dos anexos). Benefícios que dependem do comprador (�
 nunca são sugeridos sozinhos, só aparecem como alternativa. "Baixar planilha preenchida" gera o modelo com
 `cst`/`cclasstrib` preenchidos e as abas `Racional_cClassTrib` e `Alternativas`.
 
+**Cenários de enquadramento** ("Quando cada opção vale"): para a sugerida e cada alternativa, vale quando /
+não vale quando / o que usar no lugar, a partir de dados oficiais — item do anexo (descrição do produto),
+atores exigidos (comprador/vendedor, tabela de atores da calculadora), tratamento e o **dispositivo exato da
+LC 214 pelo texto consolidado** do portal Normas do Senado (`ferramentas/teste_rapido/lei_senado.py`, baixado a
+cada publicação; o Planalto recusa acessos de servidores fora do Brasil), com artigos relacionados.
+
 Na planilha de simulação, `cst` e `cclasstrib` vazios também são descobertos automaticamente
 (coluna `origem_cclasstrib` no Excel exportado).
 

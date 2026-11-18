@@ -37,6 +37,7 @@ const SAIDA = process.argv[3] || path.join(__dirname, '..', 'saida_teste');
   assert(txtDesc.includes('Efetiva 2027'), 'descoberta deve mostrar a alíquota de 2027 por padrão');
   assert(txtDesc.includes('Quando cada opção vale') && txtDesc.includes('Vale quando') && txtDesc.includes('Não vale quando'), 'descoberta deve mostrar os cenários de enquadramento');
   assert(txtDesc.includes('Anexo I, item 1') || txtDesc.includes('Anexo I, item'), 'cenários devem citar o item do anexo');
+  if (process.env.EXIGE_LEI) assert(txtDesc.includes('Dispositivo citado') && txtDesc.includes('texto consolidado'), 'cenários devem trazer o dispositivo da LC 214 (texto consolidado do Senado)');
   await page.selectOption('#desc-ano', '2033');
   const txt2033 = await page.textContent('#desc-lista');
   assert(txt2033.includes('Efetiva 2033') && txt2033.includes('2033: CBS'), 'trocar o ano deve refazer alíquota e racional');
