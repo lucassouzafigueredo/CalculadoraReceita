@@ -26,6 +26,7 @@ A cada abertura o lançador verifica o último Release e se atualiza sozinho (s�
 e veja na hora cClassTrib, CST, redução, alíquota efetiva, CBS/IBS e o racional com o **item exato do anexo**;
 busca de NCM pela descrição e "Copiar p/ Excel". Funciona offline: leva um retrato das tabelas oficiais.
 
+- **Abrir direto no navegador (para compartilhar):** https://lucassouzafigueredo.github.io/CalculadoraReceita/
 - Versão sempre atual: [releases/latest/download/teste_rapido_rtc.html](https://github.com/lucassouzafigueredo/CalculadoraReceita/releases/latest/download/teste_rapido_rtc.html)
   (regerado pelo workflow a cada atualização da calculadora; também vai dentro do pacote Windows).
 - A cada geração, `ferramentas/teste_rapido/conferir.js` compara o resultado com o validador oficial da

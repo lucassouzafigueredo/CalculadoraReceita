@@ -165,3 +165,35 @@ jobs:
           } > dist/corpo.md
           gh release create "$PACOTE" dist/Simulador-RTC-Windows.zip dist/atualizacao-simulador-rtc.zip dist/versao.json dist/teste_rapido_rtc.html \
             --title "Simulador RTC $PACOTE" --notes-file dist/corpo.md --target "$GITHUB_SHA" --latest
+
+  # Publica o teste rápido no GitHub Pages (abre direto no navegador):
+  # https://<usuario>.github.io/<repositorio>/  — usa sempre o HTML do último Release.
+  # Requer uma vez: Settings > Pages > Build and deployment > Source = "GitHub Actions".
+  pages:
+    needs: [verificar, publicar]
+    if: >-
+      always() && github.ref_name == github.event.repository.default_branch &&
+      needs.verificar.result == 'success' &&
+      (needs.publicar.result == 'success' || needs.publicar.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Baixar o teste rápido do último Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir site
+          gh release download --repo "${{ github.repository }}" --pattern teste_rapido_rtc.html --dir site
+          cp site/teste_rapido_rtc.html site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
