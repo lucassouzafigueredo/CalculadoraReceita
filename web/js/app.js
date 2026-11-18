@@ -172,6 +172,11 @@
 
     const instr = [
       ['SIMULADOR DA REFORMA TRIBUTÁRIA (CBS / IBS / IS) — INSTRUÇÕES'],
+      [`Modelo gerado em ${new Date().toLocaleDateString('pt-BR')} · calculadora oficial v${estado.versao ? estado.versao.versaoApp : '?'} (tabelas ${estado.versao ? estado.versao.versaoDb : '?'})${estado.pacote ? ` · pacote ${estado.pacote.pacote}` : ''}`],
+      [''],
+      ['MÍNIMO NECESSÁRIO POR LINHA: ncm (ou nbs, para serviços) + valor_produto. Todas as outras colunas são opcionais.'],
+      ['• cst e cclasstrib vazios: o simulador DESCOBRE pela NCM/NBS na calculadora oficial e mostra o racional (base legal, alíquota e alternativas).'],
+      ['• Veja na aba "Itens" a linha EXEMPLO-MINIMO: só NCM e valor.'],
       [''],
       ['1. Preencha a aba "Itens": uma linha por item vendido (pode ser o item de nota, ou o faturamento agregado por SKU/UF/mês).'],
       ['2. Mantenha os nomes das colunas da linha 1. Colunas extras são ignoradas. Não é necessário preencher as colunas opcionais.'],
@@ -190,7 +195,7 @@
       ['• Simulação gerencial de primeira ordem: não considera créditos nas compras nem efeitos de "por fora" sobre o preço final.'],
       [''],
       ['COLUNA', 'OBRIGATÓRIA', 'DESCRIÇÃO', 'EXEMPLO'],
-      ...R.COLUNAS.map((c) => [c.c, { S: 'Sim', C: 'Condicional', N: 'Não' }[c.obrig], c.d, c.ex]),
+      ...R.COLUNAS.map((c) => [c.c, { S: 'Sim', C: c.c === 'ncm' || c.c === 'nbs' ? 'Sim (ncm OU nbs)' : 'Sim (ou base_calculo / receita_bruta)', N: 'Não' }[c.obrig], c.d, c.ex]),
       [''],
       ['PREMISSAS (aba Premissas)'],
       ['cbs, ibs_uf, ibs_mun', '', 'Alíquotas nominais (%) informadas à calculadora a partir de 2027. Em 2026 a calculadora usa as oficiais.'],
