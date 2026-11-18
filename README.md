@@ -37,10 +37,33 @@ ou o simulador mudaram. Pode ser disparado manualmente em *Actions › Run workf
 O repositório é público para que qualquer usuário consiga baixar o pacote e receber as
 atualizações sem login. Nenhum dado de planilha é enviado ao GitHub: tudo roda na máquina.
 
+## Só tem a NCM? Descoberta da cClassTrib com racional
+
+No cartão **"Só tem a NCM?"** cole NCMs/NBS (ou envie uma planilha com a coluna `ncm`). Para cada código
+o simulador consulta a calculadora oficial e mostra:
+
+1. o cadastro oficial do código;
+2. quais cClassTrib com anexo da LC 214 aceitam o código (validador oficial `ncm-aplicavel` /
+   `nbs-aplicavel`, a mesma regra do erro REG-011);
+3. a sugestão e **por que** foi escolhida (único enquadramento geral, maior redução, ou integral);
+4. a base legal (artigo da LC 214 com o texto);
+5. as reduções e a conta da alíquota efetiva (2027 e 2033, com as premissas);
+6. crédito para o comprador e Imposto Seletivo;
+7. **todas as alternativas**, com alíquota e o motivo de não terem sido sugeridas.
+
+Situações: *Automática* (um enquadramento geral), *Revisar* (mais de uma possibilidade — o racional abre
+sozinho), *Integral* (fora dos anexos). Benefícios que dependem do comprador (órgão público, diferimento)
+nunca são sugeridos sozinhos, só aparecem como alternativa. "Baixar planilha preenchida" gera o modelo com
+`cst`/`cclasstrib` preenchidos e as abas `Racional_cClassTrib` e `Alternativas`.
+
+Na planilha de simulação, `cst` e `cclasstrib` vazios também são descobertos automaticamente
+(coluna `origem_cclasstrib` no Excel exportado).
+
 ## Planilha (aba `Itens`)
 
-Uma linha por item. Obrigatórias: `id_operacao`, `data_fato_gerador`, `uf`, `municipio_ibge`,
-`sku`, `ncm` **ou** `nbs`, `cst`, `cclasstrib` e `valor_produto` (ou `base_calculo`/`receita_bruta`).
+Uma linha por item. O mínimo é `ncm` (ou `nbs`) e `valor_produto` (ou `base_calculo`/`receita_bruta`).
+O resto tem padrão: `cst`/`cclasstrib` descobertos pela NCM, operação = linha, data = 01/01, local = São Paulo
+(com alerta). Informe `uf`, `municipio_ibge`, `cliente`, `canal` para análises por essas dimensões.
 Opcionais para análise: `cliente`, `canal`, `custo_total`, tributos atuais (`pis`, `cofins`,
 `icms`, `iss`, `ipi`) e Imposto Seletivo (`is_cst`, `is_cclasstrib`, `is_aliquota`).
 A aba `Instrucoes` do modelo descreve todas as colunas.

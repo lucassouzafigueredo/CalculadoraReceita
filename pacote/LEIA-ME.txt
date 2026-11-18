@@ -11,6 +11,8 @@ COMO USAR
      clique em "Mais informações" > "Executar assim mesmo".
    - O simulador abre numa janela própria (Edge ou Chrome).
 3. Na tela: baixe a planilha-modelo, preencha, envie e clique em Calcular.
+   Só tem a NCM? Use o cartão "Só tem a NCM?": ele descobre a cClassTrib, a
+   alíquota efetiva e mostra o racional (base legal e alternativas).
 4. Para desligar: basta fechar a janela do simulador. A calculadora é
    desligada sozinha em poucos segundos.
    "Encerrar Simulador.bat" continua disponível caso algo fique preso.

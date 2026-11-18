@@ -28,6 +28,27 @@
     <button class="botao" id="btn-modelo">Baixar planilha-modelo</button>
   </section>
 
+  <!-- 1b. Descoberta -->
+  <section class="cartao">
+    <h2><span class="passo">?</span> Só tem a NCM? Descubra a cClassTrib e a alíquota</h2>
+    <p>Cole as NCMs (mercadorias, 8 dígitos) ou NBS (serviços, 9 dígitos), uma por linha. Pode colar também <code>código;descrição</code>. A calculadora oficial testa cada código contra os anexos da LC 214 e o simulador mostra a sugestão <b>com o racional completo</b> e as alternativas.</p>
+    <p class="nota">Na planilha-modelo isso também acontece sozinho: deixe <code>cst</code> e <code>cclasstrib</code> vazios que o simulador descobre pela NCM/NBS.</p>
+    <textarea id="desc-codigos" rows="5" placeholder="02013000&#10;10063021;Arroz 5kg&#10;33051000&#10;122011200"></textarea>
+    <div class="controles linha-acoes">
+      <label class="botao secundario arquivo-inline">ou envie uma planilha com a coluna ncm<input type="file" id="desc-arquivo" accept=".xlsx,.xls,.csv"></label>
+      <button class="botao" id="btn-descobrir">Descobrir</button>
+    </div>
+    <div class="progresso" id="desc-progresso" hidden><div class="barra"><div id="desc-barra"></div></div><span id="desc-texto"></span></div>
+    <div id="desc-resultado" hidden>
+      <div class="linha-titulo">
+        <h3>Resultado</h3>
+        <button class="botao" id="btn-desc-exportar">Baixar planilha preenchida</button>
+      </div>
+      <p class="nota">Situação: <b>Automática</b> = um único enquadramento geral · <b>Revisar</b> = há mais de uma possibilidade (abra o racional) · <b>Integral</b> = fora dos anexos de redução. Alíquotas efetivas usam as premissas do passo 2.</p>
+      <div id="desc-lista"></div>
+    </div>
+  </section>
+
   <!-- 2. Premissas -->
   <section class="cartao">
     <h2><span class="passo">2</span> Confira as premissas de alíquota por ano</h2>
@@ -101,6 +122,7 @@
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/chart.umd.js"></script>
 <script src="js/regras.js"></script>
+<script src="js/descoberta.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

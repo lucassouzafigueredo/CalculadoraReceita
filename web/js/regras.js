@@ -46,18 +46,18 @@
 
   // tipo: txt | cod | num | data. obrig: S (sim) | C (condicional) | N (não)
   const COLUNAS = [
-    { c: 'id_operacao', obrig: 'S', tipo: 'txt', d: 'Identificador da operação/nota. Itens com o mesmo id, UF e município são calculados juntos.', ex: 'NF-1001' },
-    { c: 'data_fato_gerador', obrig: 'S', tipo: 'data', d: 'Data da venda (AAAA-MM-DD). Nas simulações por ano, o simulador troca só o ano.', ex: '2027-03-10' },
-    { c: 'uf', obrig: 'S', tipo: 'txt', d: 'UF do local da operação (destino).', ex: 'RS' },
-    { c: 'municipio_ibge', obrig: 'S', tipo: 'cod', d: 'Código IBGE do município (7 dígitos).', ex: '4314902' },
-    { c: 'sku', obrig: 'S', tipo: 'txt', d: 'Código do produto ou serviço.', ex: 'ARROZ-5KG' },
+    { c: 'id_operacao', obrig: 'N', tipo: 'txt', d: 'Identificador da operação/nota. Itens com o mesmo id, UF e município são calculados juntos. Se vazio, cada linha vira uma operação.', ex: 'NF-1001' },
+    { c: 'data_fato_gerador', obrig: 'N', tipo: 'data', d: 'Data da venda (AAAA-MM-DD). Nas simulações por ano, o simulador troca só o ano. Se vazio, usa 01/01.', ex: '2027-03-10' },
+    { c: 'uf', obrig: 'N', tipo: 'txt', d: 'UF do local da operação (destino). Se UF e município ficarem vazios, usa SP / São Paulo (com alerta).', ex: 'RS' },
+    { c: 'municipio_ibge', obrig: 'N', tipo: 'cod', d: 'Código IBGE do município (7 dígitos).', ex: '4314902' },
+    { c: 'sku', obrig: 'N', tipo: 'txt', d: 'Código do produto ou serviço. Se vazio, usa a NCM/NBS.', ex: 'ARROZ-5KG' },
     { c: 'descricao', obrig: 'N', tipo: 'txt', d: 'Descrição do item.', ex: 'Arroz tipo 1' },
     { c: 'cliente', obrig: 'N', tipo: 'txt', d: 'Cliente (para análise por cliente).', ex: 'Cliente A' },
     { c: 'canal', obrig: 'N', tipo: 'txt', d: 'Canal de venda (para análise por canal).', ex: 'Varejo' },
     { c: 'ncm', obrig: 'C', tipo: 'cod', d: 'NCM (8 dígitos). Obrigatório para mercadorias.', ex: '10063021' },
     { c: 'nbs', obrig: 'C', tipo: 'cod', d: 'NBS (9 dígitos). Obrigatório para serviços (no lugar da NCM).', ex: '' },
-    { c: 'cst', obrig: 'S', tipo: 'cod', d: 'CST do IBS/CBS (3 dígitos). Veja a aba Tabelas.', ex: '200' },
-    { c: 'cclasstrib', obrig: 'S', tipo: 'cod', d: 'Classificação tributária (6 dígitos; os 3 primeiros = CST). Veja a aba Tabelas.', ex: '200003' },
+    { c: 'cst', obrig: 'N', tipo: 'cod', d: 'CST do IBS/CBS (3 dígitos). Se vazio junto com cclasstrib, é DESCOBERTO pela NCM/NBS.', ex: '200' },
+    { c: 'cclasstrib', obrig: 'N', tipo: 'cod', d: 'Classificação tributária (6 dígitos; os 3 primeiros = CST). Se vazio, o simulador descobre pela NCM/NBS na calculadora oficial (veja a coluna origem no resultado).', ex: '200003' },
     { c: 'quantidade', obrig: 'N', tipo: 'num', d: 'Quantidade (padrão 1).', ex: 20 },
     { c: 'unidade', obrig: 'N', tipo: 'txt', d: 'Unidade (UN, KG, LT...; padrão UN).', ex: 'KG' },
     { c: 'valor_produto', obrig: 'C', tipo: 'num', d: 'Valor do produto/serviço na nota hoje (R$), com ICMS/PIS/COFINS "por dentro" e sem IPI. Usado para a calculadora derivar a base de cálculo oficial de cada ano.', ex: 100 },
@@ -89,6 +89,119 @@
   ];
 
   const LIMITE_ITENS_POR_OPERACAO = 50;
+  const LOCAL_PADRAO = { uf: 'SP', municipio: '3550308', nome: 'São Paulo' };
+
+  // ---------- descoberta da cClassTrib pela NCM/NBS ----------
+  // cClassTrib cujo benefício depende de QUEM compra ou de uma operação específica
+  // (órgão público, diferimento, fornecedor específico): nunca são sugeridas sozinhas,
+  // apenas listadas como alternativas.
+  const CONDICIONAL = /administra[cç][aã]o p[uú]blica|[oó]rg[aã]os|diferimento|segurança da informa|sociedades/i;
+  const INTEGRAL = { codigo: '000001', cst: '000' };
+
+  /**
+   * Recebe as classificações (objetos da API /classificacoes-tributarias/cbs-ibs) que a
+   * calculadora oficial aceitou para a NCM/NBS e devolve a sugestão.
+   * situacao: AUTOMATICA (uma opção clara) | REVISAR (mais de uma, ou só condicionais) | INTEGRAL
+   */
+  function sugerirClassificacao(validas) {
+    const gerais = validas.filter((c) => !CONDICIONAL.test(c.descricao || ''));
+    const condicionais = validas.filter((c) => CONDICIONAL.test(c.descricao || ''));
+    const ordenar = (lista) => [...lista].sort((a, b) => (b.percentualReducaoCbs || 0) - (a.percentualReducaoCbs || 0) || a.codigo.localeCompare(b.codigo));
+    if (gerais.length) {
+      const [melhor, ...resto] = ordenar(gerais);
+      return {
+        codigo: melhor.codigo, cst: melhor.codigo.slice(0, 3), classificacao: melhor,
+        situacao: resto.length || condicionais.length ? 'REVISAR' : 'AUTOMATICA',
+        alternativas: [...ordenar(resto), ...ordenar(condicionais)],
+        observacao: resto.length ? 'Produto consta em mais de um anexo; sugerida a maior redução. Confira a descrição do anexo.'
+          : condicionais.length ? 'Também há tratamento específico para certos compradores (ver alternativas).' : 'Único tratamento com benefício para esta NCM.',
+      };
+    }
+    return {
+      codigo: INTEGRAL.codigo, cst: INTEGRAL.cst, classificacao: null,
+      situacao: condicionais.length ? 'REVISAR' : 'INTEGRAL',
+      alternativas: ordenar(condicionais),
+      observacao: condicionais.length ? 'Benefício só para compradores/operações específicas (ver alternativas); sugerida tributação integral.'
+        : 'NCM fora dos anexos de redução: tributação integral.',
+    };
+  }
+
+  /** Alíquota efetiva estimada (%) = alíquota nominal da premissa x (1 - redução). */
+  function aliquotaEfetiva(classif, prem) {
+    if (!prem || prem.cbs === null) return null;
+    const red = (k) => (classif ? (classif[k] || 0) : 0) / 100;
+    return prem.cbs * (1 - red('percentualReducaoCbs')) + prem.ibs_uf * (1 - red('percentualReducaoIbsUf')) + prem.ibs_mun * (1 - red('percentualReducaoIbsMun'));
+  }
+
+  const arred4 = (n) => (n === null || n === undefined ? null : Math.round(n * 10000) / 10000);
+  const fmt = (n) => (n === null || n === undefined ? '–' : n.toLocaleString('pt-BR', { maximumFractionDigits: 4 }));
+
+  function motivoAlternativa(alt, escolhida) {
+    if (CONDICIONAL.test(alt.descricao || '')) return 'Depende de comprador/operação específica (ex.: órgão público, diferimento); use só se a venda se enquadrar.';
+    if (escolhida && (alt.percentualReducaoCbs || 0) < (escolhida.percentualReducaoCbs || 0)) return `Redução menor (${fmt(alt.percentualReducaoCbs)}% contra ${fmt(escolhida.percentualReducaoCbs)}%).`;
+    if (!escolhida) return 'Benefício condicionado; sem enquadramento geral para esta NCM.';
+    return 'Mesma redução; confira qual anexo descreve melhor o produto.';
+  }
+
+  /** Conta da alíquota efetiva, por extenso. */
+  function contaAliquota(classif, prem) {
+    if (!prem) return '';
+    if (prem.cbs === null) return `${prem.ano}: alíquotas oficiais de teste definidas pela calculadora (CBS 0,9% / IBS 0,1%), compensáveis com PIS/COFINS.`;
+    const r = (k) => (classif ? classif[k] || 0 : 0);
+    const ef = aliquotaEfetiva(classif, prem);
+    return `${prem.ano}: CBS ${fmt(prem.cbs)}% × (1 − ${fmt(r('percentualReducaoCbs'))}%) + IBS UF ${fmt(prem.ibs_uf)}% × (1 − ${fmt(r('percentualReducaoIbsUf'))}%) + IBS Mun ${fmt(prem.ibs_mun)}% × (1 − ${fmt(r('percentualReducaoIbsMun'))}%) = ${fmt(Math.round(ef * 10000) / 10000)}%`;
+  }
+
+  /**
+   * Racional completo de uma descoberta (para tela e Excel).
+   * res: { tipo, codigo, descricao, testadas, aceitas:[classif], sugestao, is, erro }
+   * premissas: lista de premissas por ano (usa 2027 e 2033).
+   */
+  function racional(res, premissas) {
+    if (res.erro) return { passos: [`${res.tipo} ${res.codigo}: ${res.erro}. Confira o código.`], alternativas: [] };
+    const sug = res.sugestao;
+    const c = sug.classificacao;
+    const pAno = (a) => (premissas || []).find((p) => p.ano === a);
+    const passos = [];
+    passos.push(`1. Cadastro oficial: ${res.tipo} ${res.codigo} = ${res.descricao || '(sem descrição)'}.`);
+    if (res.tipo === 'NCM') {
+      passos.push(`2. A calculadora oficial testou esta NCM contra as ${res.testadas} cClassTrib que dependem de anexo de NCM. ` +
+        (res.aceitas.length ? `Aceitaram: ${res.aceitas.map((a) => `${a.codigo} (${a.descricao})`).join('; ')}.` : 'Nenhuma aceitou: o produto não está em anexo de redução.'));
+    } else {
+      passos.push(`2. A calculadora oficial testou esta NBS contra as ${res.testadas} cClassTrib que dependem de anexo de NBS. ` +
+        (res.aceitas.length ? `Aceitaram: ${res.aceitas.map((a) => `${a.codigo} (${a.descricao})`).join('; ')}.` : 'Esta NBS não aparece em nenhum anexo: tributação integral.'));
+    }
+    const motivoEscolha = sug.situacao === 'AUTOMATICA' ? 'é o único tratamento aplicável a qualquer comprador'
+      : sug.situacao === 'INTEGRAL' ? 'nenhum anexo de redução abrange este código'
+      : c ? 'tem a maior redução entre as opções de aplicação geral; há alternativas abaixo'
+      : 'as únicas opções com benefício dependem do comprador/operação; por prudência foi sugerida a tributação integral';
+    passos.push(`3. Sugerida ${sug.codigo} (CST ${sug.cst}${c ? ` – ${c.descricaoTratamentoTributario || c.descricao}` : ' – tributação integral'}) porque ${motivoEscolha}. ${sug.observacao}`);
+    const f = c && c._fund;
+    passos.push(`4. Base legal (LC 214/2025): ${f ? (String(f.texto || '').startsWith(f.textoCurto) ? f.texto : `${f.textoCurto} – ${f.texto}`) : 'regra geral, sem redução.'}`);
+    passos.push(`5. Redução: CBS ${fmt(c ? c.percentualReducaoCbs : 0)}% · IBS UF ${fmt(c ? c.percentualReducaoIbsUf : 0)}% · IBS Mun ${fmt(c ? c.percentualReducaoIbsMun : 0)}%.`);
+    passos.push(`6. Alíquota efetiva estimada (alíquotas nominais = premissas editáveis do passo 2 da tela): ${[contaAliquota(c, pAno(2027)), contaAliquota(c, pAno(2033))].filter(Boolean).join(' | ')}.`);
+    if (c) passos.push(`7. Crédito para o comprador: CBS ${c.indicaApropriacaoCreditoAdquirenteCbs ? 'sim' : 'não'} · IBS ${c.indicaApropriacaoCreditoAdquirenteIbs ? 'sim' : 'não'}.`);
+    if (res.is) passos.push(`8. Imposto Seletivo: o cadastro oficial marca este produto como sujeito ao IS (CST ${res.is.cst} / cClassTrib ${res.is.cclasstrib}). ${res.is.aliquota !== null ? `Alíquota ad valorem ${fmt(res.is.aliquota)}%.` : 'A alíquota ainda não está definida na calculadora: informe is_aliquota para simular.'}`);
+    const alternativas = sug.alternativas.map((a) => ({
+      codigo: a.codigo, cst: a.codigo.slice(0, 3), descricao: a.descricao,
+      reducao: a.percentualReducaoCbs || 0,
+      efetiva_2033: arred4(aliquotaEfetiva(a, pAno(2033))),
+      base_legal: a._fund ? a._fund.textoCurto : '',
+      motivo: motivoAlternativa(a, c),
+    }));
+    if (c && sug.codigo !== '000001') {
+      alternativas.push({ codigo: '000001', cst: '000', descricao: 'Tributação integral (sem redução)', reducao: 0,
+        efetiva_2033: arred4(aliquotaEfetiva(null, pAno(2033))), base_legal: 'LC 214/2025', motivo: 'Só se o produto não se enquadrar na descrição do anexo.' });
+    }
+    return { passos, alternativas };
+  }
+
+  function descricaoNcm(info) {
+    if (!info) return '';
+    const partes = [info.posicao, info.subposicao, info.item, info.subitem].filter(Boolean);
+    const especifica = partes[partes.length - 1] || info.capitulo || '';
+    return partes.length > 1 ? `${partes[0]} › ${especifica}` : especifica;
+  }
 
   // ---------- utilidades ----------
   function normalizarCabecalho(s) {
@@ -186,22 +299,33 @@
       ['frete', 'seguro', 'outras_despesas', 'desconto', 'pis', 'cofins', 'icms', 'iss', 'ipi'].forEach((c) => { if (l[c] === null) l[c] = 0; });
 
       const antes = problemas.filter((x) => x.tipo === 'erro').length;
-      if (!l.id_operacao) p('id_operacao', 'Obrigatório');
-      if (!l.sku) p('sku', 'Obrigatório');
-      if (!l.data) p('data_fato_gerador', 'Data ausente ou inválida (use AAAA-MM-DD)');
+      if (!l.id_operacao) l.id_operacao = `OP-${nLinha}`;
+      if (!l.sku) l.sku = l.ncm || l.nbs || `LINHA-${nLinha}`;
+      if (vazio(bruta.data_fato_gerador)) l.data = { ano: 2027, mes: 1, dia: 1 };
+      else if (!l.data) p('data_fato_gerador', 'Data inválida (use AAAA-MM-DD)');
+      if (!l.uf && !l.municipio_ibge) {
+        l.uf = LOCAL_PADRAO.uf; l.municipio_ibge = LOCAL_PADRAO.municipio;
+        p('uf', `UF/município vazios: usado ${LOCAL_PADRAO.uf} / ${LOCAL_PADRAO.nome}`, 'alerta');
+      }
       if (!UFS.includes(l.uf)) p('uf', `UF "${l.uf}" inválida`);
       if (!/^\d{7}$/.test(l.municipio_ibge)) p('municipio_ibge', 'Código IBGE deve ter 7 dígitos');
       if (!l.ncm && !l.nbs) p('ncm', 'Informe NCM (mercadoria) ou NBS (serviço)');
       if (l.ncm && !/^\d{8}$/.test(l.ncm)) p('ncm', 'NCM deve ter 8 dígitos');
       if (l.nbs && !/^\d{9}$/.test(l.nbs)) p('nbs', 'NBS deve ter 9 dígitos');
-      if (!/^\d{3}$/.test(l.cst)) p('cst', 'CST deve ter 3 dígitos');
-      if (!/^\d{6}$/.test(l.cclasstrib)) p('cclasstrib', 'cClassTrib deve ter 6 dígitos');
+      l.origem_cclasstrib = bruta.__origem_cclasstrib || 'informada';
+      if (!l.cst && /^\d{6}$/.test(l.cclasstrib)) l.cst = l.cclasstrib.slice(0, 3);
+      if (!l.cst && !l.cclasstrib) p('cclasstrib', 'cClassTrib vazia e não foi possível descobrir pela NCM/NBS');
+      else if (!/^\d{3}$/.test(l.cst)) p('cst', 'CST deve ter 3 dígitos');
+      if (!l.cclasstrib) { /* já reportado */ } else if (!/^\d{6}$/.test(l.cclasstrib)) p('cclasstrib', 'cClassTrib deve ter 6 dígitos');
       else if (l.cst && l.cclasstrib.slice(0, 3) !== l.cst) p('cclasstrib', `cClassTrib ${l.cclasstrib} não pertence ao CST ${l.cst}`);
       else if (conhecidas && !conhecidas.has(l.cclasstrib)) p('cclasstrib', `cClassTrib ${l.cclasstrib} não encontrada na tabela vigente da calculadora`, 'alerta');
       if (l.is_cst || l.is_cclasstrib || l.is_aliquota !== null) {
         if (!/^\d{3}$/.test(l.is_cst)) p('is_cst', 'Imposto Seletivo: CST deve ter 3 dígitos');
         if (!/^\d{6}$/.test(l.is_cclasstrib)) p('is_cclasstrib', 'Imposto Seletivo: cClassTrib deve ter 6 dígitos');
-        if (l.is_aliquota === null) p('is_aliquota', 'Imposto Seletivo: informe a alíquota (%)');
+        if (l.is_aliquota === null) {
+          p('is_aliquota', 'Produto sujeito ao Imposto Seletivo, mas sem alíquota (ainda não fixada em lei): IS não será calculado. Informe is_aliquota para simular.', 'alerta');
+          l.is_cst = ''; l.is_cclasstrib = '';
+        }
       }
 
       // valores econômicos
@@ -398,7 +522,7 @@
 
   const API = {
     ANOS, UFS, PREMISSAS_PADRAO, COLUNAS_PREMISSAS, COLUNAS, EXEMPLOS, LIMITE_ITENS_POR_OPERACAO,
-    normalizarCabecalho, numero, codigo, dataISO, dataHoraNoAno, validarLinhas, lerPremissas,
+    normalizarCabecalho, numero, codigo, LOCAL_PADRAO, sugerirClassificacao, aliquotaEfetiva, descricaoNcm, racional, contaAliquota, dataISO, dataHoraNoAno, validarLinhas, lerPremissas,
     requisicaoBase, chaveBase, temIS, montarOperacoes, lerObjeto, metricas, somar, r2,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;

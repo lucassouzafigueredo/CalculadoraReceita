@@ -15,7 +15,9 @@
     classificacoes: new Map(),
     resultados: new Map(), // ano -> array (por linha) de resultado da API
     anos: [],
+    descobertas: [], // resultados da descoberta pela NCM/NBS (cartão e planilha)
   };
+  const DATA_DESCOBERTA = '2027-01-01';
 
   const $ = (id) => document.getElementById(id);
   const fmtR = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
@@ -140,6 +142,9 @@
     $('sel-ano').addEventListener('change', renderResultados);
     $('sel-dim').addEventListener('change', renderTabelaDimensao);
     $('btn-exportar').addEventListener('click', exportar);
+    $('btn-descobrir').addEventListener('click', () => descobrirCodigos(lerCodigosColados($('desc-codigos').value)));
+    $('desc-arquivo').addEventListener('change', (e) => e.target.files[0] && descobrirDaPlanilha(e.target.files[0]));
+    $('btn-desc-exportar').addEventListener('click', exportarDescobertas);
   }
 
   // ---------------- planilha-modelo ----------------
@@ -157,6 +162,12 @@
     await garantirClassificacoes();
     btn.disabled = false;
     if (!estado.classificacoes.size) alert('Não foi possível carregar a tabela de cClassTrib da calculadora. A planilha será gerada sem a aba Tabelas preenchida.');
+    const wb = montarModelo(R.EXEMPLOS);
+    const v = estado.versao ? `_calc-v${estado.versao.versaoApp}` : '';
+    XLSX.writeFile(wb, `modelo_simulador_rtc${v}.xlsx`);
+  }
+
+  function montarModelo(itensExemplo) {
     const wb = XLSX.utils.book_new();
 
     const instr = [
@@ -193,7 +204,7 @@
     XLSX.utils.book_append_sheet(wb, wsI, 'Instrucoes');
 
     const cab = R.COLUNAS.map((c) => c.c);
-    const linhas = R.EXEMPLOS.map((ex) => cab.map((c) => (ex[c] === undefined ? '' : ex[c])));
+    const linhas = itensExemplo.map((ex) => cab.map((c) => (ex[c] === undefined || ex[c] === null ? '' : ex[c])));
     const wsItens = XLSX.utils.aoa_to_sheet([cab, ...linhas]);
     wsItens['!cols'] = cab.map((c) => ({ wch: Math.max(c.length + 2, ['descricao'].includes(c) ? 40 : 12) }));
     XLSX.utils.book_append_sheet(wb, wsItens, 'Itens');
@@ -212,8 +223,7 @@
     wsT['!cols'] = [{ wch: 11 }, { wch: 6 }, { wch: 80 }, { wch: 30 }, { wch: 14 }, { wch: 13 }, { wch: 15 }, { wch: 16 }, { wch: 20 }, { wch: 20 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, wsT, 'Tabelas');
 
-    const v = estado.versao ? `_calc-v${estado.versao.versaoApp}` : '';
-    XLSX.writeFile(wb, `modelo_simulador_rtc${v}.xlsx`);
+    return wb;
   }
 
   // ---------------- leitura da planilha ----------------
@@ -243,6 +253,7 @@
         renderPremissas();
       }
       const cruas = linhasDaAba(wb.Sheets[nomeItens]);
+      await completarPelaNcm(cruas);
       const { linhas, problemas } = R.validarLinhas(cruas, estado.classificacoes.size ? estado.classificacoes : null);
       estado.linhas = linhas;
       estado.problemas = problemas;
@@ -266,6 +277,11 @@
     }
     if (linhasErro) h += `<div class="aviso erro"><b>${linhasErro}</b> linha(s) com erro serão ignoradas. Corrija e envie de novo, ou calcule só as válidas.</div>`;
     if (alertas.length) h += `<div class="aviso alerta"><b>${alertas.length}</b> alerta(s): não impedem o cálculo.</div>`;
+    const desc = estado.linhas.filter((l) => String(l.origem_cclasstrib).startsWith('descoberta'));
+    if (desc.length) {
+      const rev = desc.filter((l) => l.origem_cclasstrib.includes('revisar')).length;
+      h += `<div class="aviso ${rev ? 'alerta' : 'ok'}"><b>${desc.length}</b> linha(s) tiveram a cClassTrib descoberta pela NCM/NBS${rev ? `, <b>${rev}</b> com mais de uma possibilidade` : ''}. O racional de cada código está no cartão "Só tem a NCM?" acima.</div>`;
+    }
     if (estado.problemas.length) {
       const lista = estado.problemas.slice(0, 300);
       h += '<div class="tabela-rolagem alta"><table class="tabela"><thead><tr><th class="num">Linha</th><th>Coluna</th><th>Tipo</th><th>Mensagem</th></tr></thead><tbody>' +
@@ -540,10 +556,10 @@
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), `${aba}_${anoSel}`.slice(0, 31));
     });
 
-    const itens = [['ano', 'linha', 'id_operacao', 'sku', 'descricao', 'cliente', 'canal', 'uf', 'municipio_ibge', 'ncm', 'nbs', 'cst', 'cclasstrib', 'situacao', 'base_cbs_ibs', 'reducao_cbs_%', 'cbs', 'ibs_uf', 'ibs_mun', 'is', 'tributos_antigos', 'receita_bruta', 'carga_atual', 'carga_nova', 'receita_liquida_atual', 'receita_liquida_nova', 'custo', 'margem_atual', 'margem_nova', 'reajuste_%']];
+    const itens = [['ano', 'linha', 'id_operacao', 'sku', 'descricao', 'cliente', 'canal', 'uf', 'municipio_ibge', 'ncm', 'nbs', 'cst', 'cclasstrib', 'origem_cclasstrib', 'situacao', 'base_cbs_ibs', 'reducao_cbs_%', 'cbs', 'ibs_uf', 'ibs_mun', 'is', 'tributos_antigos', 'receita_bruta', 'carga_atual', 'carga_nova', 'receita_liquida_atual', 'receita_liquida_nova', 'custo', 'margem_atual', 'margem_nova', 'reajuste_%']];
     estado.anos.forEach((ano) => {
       metricasDoAno(ano).forEach(({ l, r, m }) => {
-        itens.push([ano, l._linha, l.id_operacao, l.sku, l.descricao, l.cliente, l.canal, l.uf, l.municipio_ibge, l.ncm, l.nbs, l.cst, l.cclasstrib, r ? r.estado : '',
+        itens.push([ano, l._linha, l.id_operacao, l.sku, l.descricao, l.cliente, l.canal, l.uf, l.municipio_ibge, l.ncm, l.nbs, l.cst, l.cclasstrib, l.origem_cclasstrib, r ? r.estado : '',
           r ? r.vBC : null, r ? r.pRedCBS : null, r ? r.vCBS : null, r ? r.vIBSUF : null, r ? r.vIBSMun : null, r ? r.vIS : null, m.legado, m.receita_bruta, m.carga_atual, m.calculado ? m.carga_nova : null,
           m.rl_atual, m.calculado ? m.rl_nova : null, m.custo, m.margem_atual, m.calculado ? m.margem_nova : null, m.calculado ? m.reajuste_pct : null].map(arred));
       });
@@ -573,11 +589,166 @@
       ['premissa', 'Preço ao cliente mantido; CBS/IBS/IS pela calculadora oficial; alíquotas 2027+ são premissas informadas (cálculo simulado); sem créditos de compras.'],
     ];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(meta), 'Metadados');
+    if (estado.descobertas.length) abasRacional(wb);
 
     XLSX.writeFile(wb, `resultado_simulador_rtc_${hoje()}.xlsx`);
   }
 
   function arred(v) { return typeof v === 'number' && isFinite(v) ? R.r2(v) : v === null || v === undefined || (typeof v === 'number' && !isFinite(v)) ? '' : v; }
+
+  // ---------------- descoberta pela NCM/NBS ----------------
+  let motor;
+  function motorDescoberta() {
+    if (!motor) motor = Descoberta.criar({ requisitar, emParalelo, concorrencia: CONCORRENCIA });
+    return motor;
+  }
+
+  function codigoItem(codigoBruto, rotulo) {
+    const d = String(codigoBruto ?? '').replace(/\D/g, '');
+    if (d.length === 8 || (d.length === 7 && typeof codigoBruto === 'number')) return { tipo: 'NCM', codigo: d.padStart(8, '0'), rotulo };
+    if (d.length === 9) return { tipo: 'NBS', codigo: d, rotulo };
+    return null;
+  }
+
+  function lerCodigosColados(texto) {
+    return String(texto || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
+      const [cod, ...resto] = l.split(/[;\t]/);
+      return codigoItem(cod.trim(), resto.join(' ').trim()) || { tipo: '?', codigo: cod.trim(), rotulo: resto.join(' ').trim(), invalido: true };
+    });
+  }
+
+  async function descobrirDaPlanilha(arquivo) {
+    const wb = XLSX.read(await arquivo.arrayBuffer(), { type: 'array' });
+    let itens = [];
+    for (const nome of wb.SheetNames) {
+      const linhas = linhasDaAba(wb.Sheets[nome]);
+      if (!linhas.length || !('ncm' in linhas[0] || 'nbs' in linhas[0])) continue;
+      itens = linhas.map((l) => codigoItem(l.ncm || l.nbs, l.descricao || l.sku || '')).filter(Boolean);
+      break;
+    }
+    if (!itens.length) { alert('Não encontrei uma coluna "ncm" (ou "nbs") com códigos válidos na planilha.'); return; }
+    $('desc-codigos').value = itens.map((i) => (i.rotulo ? `${i.codigo};${i.rotulo}` : i.codigo)).join('\n');
+    descobrirCodigos(itens);
+  }
+
+  async function descobrirCodigos(itens) {
+    if (!itens.length) { alert('Cole pelo menos uma NCM (8 dígitos) ou NBS (9 dígitos).'); return; }
+    const validos = itens.filter((i) => !i.invalido);
+    const btn = $('btn-descobrir');
+    btn.disabled = true;
+    $('desc-progresso').hidden = false;
+    const prog = (f, t) => { $('desc-barra').style.width = `${Math.round((f / Math.max(t, 1)) * 100)}%`; $('desc-texto').textContent = `${f}/${t} códigos`; };
+    $('desc-texto').textContent = 'Lendo os anexos da calculadora oficial…';
+    const mapa = await motorDescoberta().descobrirLista(validos, DATA_DESCOBERTA, prog);
+    const rotulos = new Map(itens.map((i) => [`${i.tipo}|${i.codigo}`, i.rotulo]));
+    estado.descobertas = [
+      ...itens.filter((i) => i.invalido).map((i) => ({ tipo: 'Código', codigo: i.codigo, rotulo: i.rotulo, erro: 'não tem 8 dígitos (NCM) nem 9 (NBS)' })),
+      ...[...mapa.values()].map((r) => ({ ...r, rotulo: rotulos.get(`${r.tipo}|${r.codigo}`) || '' })),
+    ];
+    btn.disabled = false;
+    $('desc-progresso').hidden = true;
+    renderDescobertas();
+  }
+
+  // completa cst/cclasstrib (e IS) das linhas da planilha que só têm NCM/NBS
+  async function completarPelaNcm(cruas) {
+    const vazio = (v) => v === undefined || v === null || String(v).trim() === '';
+    const pend = cruas.filter((b) => vazio(b.cclasstrib) && vazio(b.cst) && (!vazio(b.ncm) || !vazio(b.nbs)));
+    if (!pend.length) return;
+    const itemDe = (b) => codigoItem(!vazio(b.ncm) ? b.ncm : b.nbs, b.descricao || b.sku || '');
+    const itens = pend.map(itemDe).filter(Boolean);
+    const mapa = await motorDescoberta().descobrirLista(itens, DATA_DESCOBERTA, (f, t) => {
+      $('soltar-texto').textContent = `Descobrindo a cClassTrib pela NCM/NBS na calculadora oficial… ${f}/${t}`;
+    });
+    pend.forEach((b) => {
+      const it = itemDe(b);
+      const r = it && mapa.get(`${it.tipo}|${it.codigo}`);
+      if (!r || r.erro) return;
+      b.cst = r.sugestao.cst;
+      b.cclasstrib = r.sugestao.codigo;
+      b.__origem_cclasstrib = r.sugestao.situacao === 'REVISAR' ? 'descoberta – revisar' : 'descoberta';
+      if (r.is && vazio(b.is_cst)) {
+        b.is_cst = r.is.cst; b.is_cclasstrib = r.is.cclasstrib;
+        if (r.is.aliquota !== null && vazio(b.is_aliquota)) b.is_aliquota = r.is.aliquota;
+      }
+    });
+    estado.descobertas = [...mapa.values()].map((r) => ({ ...r, rotulo: '' }));
+    renderDescobertas();
+  }
+
+  const ROTULO_SITUACAO = { AUTOMATICA: 'Automática', REVISAR: 'Revisar', INTEGRAL: 'Integral', ERRO: 'Erro' };
+  const ORDEM_SITUACAO = { REVISAR: 0, ERRO: 1, AUTOMATICA: 2, INTEGRAL: 3 };
+  const prem = (ano) => estado.premissas.find((p) => p.ano === ano);
+
+  function renderDescobertas() {
+    const lista = [...estado.descobertas].sort((a, b) => ORDEM_SITUACAO[a.erro ? 'ERRO' : a.sugestao.situacao] - ORDEM_SITUACAO[b.erro ? 'ERRO' : b.sugestao.situacao]);
+    const resumo = {};
+    lista.forEach((r) => { const k = r.erro ? 'ERRO' : r.sugestao.situacao; resumo[k] = (resumo[k] || 0) + 1; });
+    let h = `<p>${lista.length} código(s): ${Object.entries(resumo).map(([k, v]) => `<span class="etiqueta ${k}">${ROTULO_SITUACAO[k]} ${v}</span>`).join(' ')}</p>`;
+    lista.forEach((r) => {
+      const situ = r.erro ? 'ERRO' : r.sugestao.situacao;
+      const rac = R.racional(r, estado.premissas);
+      const c = r.erro ? null : r.sugestao.classificacao;
+      const ef = r.erro ? null : R.aliquotaEfetiva(c, prem(2033));
+      h += `<details class="desc-item" ${situ === 'REVISAR' || situ === 'ERRO' ? 'open' : ''}><summary>
+        <span class="desc-cod">${esc(r.codigo)}<div class="desc-sub">${esc(r.tipo)}</div></span>
+        <span>${esc(r.descricao || r.rotulo || '')}${r.rotulo && r.descricao ? `<div class="desc-sub">${esc(r.rotulo)}</div>` : ''}</span>
+        <span>${r.erro ? '–' : `cClassTrib <b>${r.sugestao.codigo}</b><div class="desc-sub">CST ${r.sugestao.cst} · redução ${fmtN.format(c ? c.percentualReducaoCbs : 0)}%</div>`}</span>
+        <span>${r.erro ? '' : `Efetiva 2033 <b>${fmtP(ef)}</b><div class="desc-sub">${r.is ? 'Sujeito ao IS' : 'Sem IS'}</div>`}</span>
+        <span class="etiqueta ${situ}">${ROTULO_SITUACAO[situ]}</span>
+      </summary><div class="desc-corpo"><b>Racional</b><ol>${rac.passos.map((p) => `<li>${esc(p)}</li>`).join('')}</ol>`;
+      if (rac.alternativas.length) {
+        h += '<b>Alternativas</b><div class="tabela-rolagem"><table class="tabela"><thead><tr><th>cClassTrib</th><th>CST</th><th>Descrição</th><th class="num">Redução</th><th class="num">Efetiva 2033</th><th>Base legal</th><th>Por que não foi a sugerida</th></tr></thead><tbody>' +
+          rac.alternativas.map((a) => `<tr><td>${a.codigo}</td><td>${a.cst}</td><td>${esc(a.descricao)}</td><td class="num">${fmtN.format(a.reducao)}%</td><td class="num">${fmtP(a.efetiva_2033)}</td><td>${esc(a.base_legal)}</td><td>${esc(a.motivo)}</td></tr>`).join('') +
+          '</tbody></table></div>';
+      }
+      h += '</div></details>';
+    });
+    $('desc-lista').innerHTML = h;
+    $('desc-resultado').hidden = !lista.length;
+  }
+
+  function abasRacional(wb) {
+    const rac = [['tipo', 'codigo', 'descricao_oficial', 'descricao_informada', 'situacao', 'cclasstrib_sugerida', 'cst', 'tratamento', 'reducao_cbs_%', 'reducao_ibs_uf_%', 'reducao_ibs_mun_%', 'aliquota_efetiva_2027_%', 'aliquota_efetiva_2033_%', 'base_legal', 'imposto_seletivo', 'credito_adquirente', 'racional']];
+    const alt = [['tipo', 'codigo', 'cclasstrib_sugerida', 'alternativa', 'cst', 'descricao', 'reducao_%', 'aliquota_efetiva_2033_%', 'base_legal', 'por_que_nao_foi_a_sugerida']];
+    estado.descobertas.forEach((r) => {
+      const x = R.racional(r, estado.premissas);
+      if (r.erro) { rac.push([r.tipo, r.codigo, '', r.rotulo, 'ERRO', '', '', '', '', '', '', '', '', '', '', '', x.passos.join('\n')]); return; }
+      const c = r.sugestao.classificacao;
+      const ef = (a) => { const v = R.aliquotaEfetiva(c, prem(a)); return v === null ? '' : R.r2(v * 100) / 100; };
+      rac.push([r.tipo, r.codigo, r.descricao, r.rotulo, ROTULO_SITUACAO[r.sugestao.situacao], r.sugestao.codigo, r.sugestao.cst, c ? c.descricaoTratamentoTributario : 'Tributação integral',
+        c ? c.percentualReducaoCbs : 0, c ? c.percentualReducaoIbsUf : 0, c ? c.percentualReducaoIbsMun : 0, ef(2027), ef(2033),
+        c && c._fund ? `${c._fund.textoCurto} – ${c._fund.texto}` : 'LC 214/2025 (regra geral)', r.is ? 'Sim' : 'Não',
+        c ? `CBS ${c.indicaApropriacaoCreditoAdquirenteCbs ? 'sim' : 'não'} / IBS ${c.indicaApropriacaoCreditoAdquirenteIbs ? 'sim' : 'não'}` : '', x.passos.join('\n')]);
+      x.alternativas.forEach((a) => alt.push([r.tipo, r.codigo, r.sugestao.codigo, a.codigo, a.cst, a.descricao, a.reducao, a.efetiva_2033, a.base_legal, a.motivo]));
+    });
+    const wsR = XLSX.utils.aoa_to_sheet(rac);
+    wsR['!cols'] = [6, 11, 50, 25, 11, 12, 6, 25, 9, 9, 9, 11, 11, 60, 8, 18, 120].map((w) => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, wsR, 'Racional_cClassTrib');
+    const wsA = XLSX.utils.aoa_to_sheet(alt);
+    wsA['!cols'] = [6, 11, 12, 11, 6, 70, 10, 12, 12, 70].map((w) => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, wsA, 'Alternativas');
+  }
+
+  async function exportarDescobertas() {
+    await garantirClassificacoes();
+    const itens = estado.descobertas.filter((r) => !r.erro).map((r) => ({
+      sku: r.rotulo || r.codigo,
+      descricao: r.descricao,
+      ncm: r.tipo === 'NCM' ? r.codigo : '',
+      nbs: r.tipo === 'NBS' ? r.codigo : '',
+      cst: r.sugestao.cst,
+      cclasstrib: r.sugestao.codigo,
+      is_cst: r.is ? r.is.cst : '',
+      is_cclasstrib: r.is ? r.is.cclasstrib : '',
+      is_aliquota: r.is && r.is.aliquota !== null ? r.is.aliquota : '',
+      quantidade: 1,
+    }));
+    const wb = montarModelo(itens);
+    abasRacional(wb);
+    XLSX.writeFile(wb, `descoberta_cclasstrib_${hoje()}.xlsx`);
+  }
+
 
   iniciar();
 })();

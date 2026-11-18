@@ -25,6 +25,35 @@ const SAIDA = process.argv[3] || path.join(__dirname, '..', 'saida_teste');
   await page.waitForSelector('#status-ponto.ok', { timeout: 30000 });
   console.log('Versão:', await page.textContent('#status-texto'));
 
+  // ---- descoberta da cClassTrib só pela NCM/NBS ----
+  const XLSXd = require('../web/vendor/xlsx.full.min.js');
+  await page.fill('#desc-codigos', '02013000\n10063021;Arroz 5kg\n33051000\n122011200;Pré-escola\n12345');
+  await page.click('#btn-descobrir');
+  await page.waitForSelector('#desc-resultado:not([hidden])', { timeout: 60000 });
+  const txtDesc = await page.textContent('#desc-lista');
+  assert(txtDesc.includes('200003') && txtDesc.includes('Art. 125'), 'carne/arroz devem cair na cesta básica (200003, Art. 125)');
+  assert(txtDesc.includes('200028'), 'pré-escola deve cair em 200028 (educação, 60%)');
+  assert(txtDesc.includes('Revisar') && txtDesc.includes('Por que não foi a sugerida'), 'arroz tem mais de uma possibilidade e deve mostrar alternativas');
+  const [dDesc] = await Promise.all([page.waitForEvent('download'), page.click('#btn-desc-exportar')]);
+  const arqDesc = path.join(SAIDA, dDesc.suggestedFilename());
+  await dDesc.saveAs(arqDesc);
+  const wbDesc = XLSXd.read(fs.readFileSync(arqDesc));
+  assert(wbDesc.SheetNames.includes('Racional_cClassTrib') && wbDesc.SheetNames.includes('Alternativas'), 'export da descoberta deve ter racional e alternativas');
+  const itensDesc = XLSXd.utils.sheet_to_json(wbDesc.Sheets.Itens);
+  assert(itensDesc.find((r) => String(r.ncm) === '02013000').cclasstrib === '200003', 'planilha preenchida deve trazer a cClassTrib');
+  console.log('Descoberta: OK');
+
+  // planilha só com NCM e valor: cst/cclasstrib descobertos na leitura
+  const wbMin = XLSXd.utils.book_new();
+  XLSXd.utils.book_append_sheet(wbMin, XLSXd.utils.aoa_to_sheet([['ncm', 'valor_produto'], ['02013000', 100], ['33051000', 50]]), 'Itens');
+  const arqMin = path.join(SAIDA, 'so_ncm.xlsx');
+  fs.writeFileSync(arqMin, XLSXd.write(wbMin, { type: 'buffer', bookType: 'xlsx' }));
+  await page.setInputFiles('#arquivo', arqMin);
+  await page.waitForSelector('#area-calculo:not([hidden])', { timeout: 60000 });
+  const txtVal = await page.textContent('#validacao');
+  assert(txtVal.includes('2 linha(s) prontas') && txtVal.includes('descoberta pela NCM'), `planilha só com NCM deve validar: ${txtVal}`);
+  console.log('Planilha só com NCM: OK');
+
   const [download] = await Promise.all([page.waitForEvent('download'), page.click('#btn-modelo')]);
   const modelo = path.join(SAIDA, download.suggestedFilename());
   await download.saveAs(modelo);
