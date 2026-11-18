@@ -16,6 +16,7 @@
     resultados: new Map(), // ano -> array (por linha) de resultado da API
     anos: [],
     descobertas: [], // resultados da descoberta pela NCM/NBS (cartão e planilha)
+    cen: null, // dados oficiais de cenários: atores, tratamentos e itens dos anexos
   };
   const DATA_DESCOBERTA = '2027-01-01';
 
@@ -97,6 +98,11 @@
     }
     estado.carregandoTabelas = carregarClassificacoes();
     await estado.carregandoTabelas;
+    if (window.DADOS_ONLINE) estado.cen = window.DADOS_ONLINE;
+    else {
+      try { const r = await fetch('dados_cenarios.json', { cache: 'no-store' }); if (r.ok) estado.cen = await r.json(); } catch (e) { /* sem cenários detalhados */ }
+    }
+    if (estado.descobertas.length) renderDescobertas();
   }
 
   function formatarData(iso) {
@@ -707,7 +713,7 @@
     let h = `<p>${lista.length} código(s): ${Object.entries(resumo).map(([k, v]) => `<span class="etiqueta ${k}">${ROTULO_SITUACAO[k]} ${v}</span>`).join(' ')}</p>`;
     lista.forEach((r) => {
       const situ = r.erro ? 'ERRO' : r.sugestao.situacao;
-      const rac = R.racional(r, estado.premissas, [anoDesc]);
+      const rac = R.racional(r, estado.premissas, [anoDesc], estado.cen);
       const c = r.erro ? null : r.sugestao.classificacao;
       const ef = r.erro ? null : R.aliquotaEfetiva(c, prem(anoDesc));
       h += `<details class="desc-item" ${situ === 'REVISAR' || situ === 'ERRO' ? 'open' : ''}><summary>
@@ -722,31 +728,45 @@
           rac.alternativas.map((a) => `<tr><td>${a.codigo}</td><td>${a.cst}</td><td>${esc(a.descricao)}</td><td class="num">${fmtN.format(a.reducao)}%</td><td class="num">${fmtP(a.efetiva)}</td><td>${esc(a.base_legal)}</td><td>${esc(a.motivo)}</td></tr>`).join('') +
           '</tbody></table></div>';
       }
+      if (!r.erro && (rac.alternativas.length || r.sugestao.situacao !== 'INTEGRAL')) h += htmlCenarios(r, rac);
       h += '</div></details>';
     });
     $('desc-lista').innerHTML = h;
     $('desc-resultado').hidden = !lista.length;
   }
 
+  function htmlCenarios(r, rac) {
+    const cartao = (titulo, cen, classe) => `<div class="cen ${classe}"><div class="cen-tit">${titulo}</div>` +
+      `<div class="cen-col"><b>Vale quando</b><ul>${cen.enquadra.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` +
+      (cen.nao.length ? `<div class="cen-col"><b>Não vale quando</b><ul>${cen.nao.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '') +
+      (cen.efeito ? `<div class="cen-nota"><b>Efeito:</b> ${esc(cen.efeito)}</div>` : '') +
+      (cen.fonte ? `<div class="cen-nota">${esc(cen.fonte)}</div>` : '') +
+      `<details class="cen-lei"><summary>Base legal completa</summary>${esc(cen.baseLegal)}</details></div>`;
+    let h = '<b>Quando cada opção vale</b><div class="cens">';
+    h += cartao(`Sugerida: ${r.sugestao.codigo}`, rac.cenarioSugerida, 'sug');
+    rac.alternativas.forEach((a) => { h += cartao(`Alternativa: ${a.codigo} · efetiva ${fmtP(a.efetiva)}`, a.cenarios, 'alt'); });
+    return h + '</div>';
+  }
+
   function abasRacional(wb) {
-    const rac = [['tipo', 'codigo', 'descricao_oficial', 'descricao_informada', 'situacao', 'cclasstrib_sugerida', 'cst', 'tratamento', 'reducao_cbs_%', 'reducao_ibs_uf_%', 'reducao_ibs_mun_%', ...R.ANOS.map((a) => `aliquota_efetiva_${a}_%`), 'base_legal', 'imposto_seletivo', 'credito_adquirente', 'racional']];
-    const alt = [['tipo', 'codigo', 'cclasstrib_sugerida', 'alternativa', 'cst', 'descricao', 'reducao_%', 'aliquota_efetiva_2033_%', 'base_legal', 'por_que_nao_foi_a_sugerida']];
+    const rac = [['tipo', 'codigo', 'descricao_oficial', 'descricao_informada', 'situacao', 'cclasstrib_sugerida', 'cst', 'tratamento', 'reducao_cbs_%', 'reducao_ibs_uf_%', 'reducao_ibs_mun_%', ...R.ANOS.map((a) => `aliquota_efetiva_${a}_%`), 'base_legal', 'imposto_seletivo', 'credito_adquirente', 'racional', 'condicoes_da_sugerida']];
+    const alt = [['tipo', 'codigo', 'cclasstrib_sugerida', 'alternativa', 'cst', 'descricao', 'reducao_%', 'aliquota_efetiva_2033_%', 'base_legal', 'por_que_nao_foi_a_sugerida', 'vale_quando', 'nao_vale_quando', 'efeito', 'observacao']];
     estado.descobertas.forEach((r) => {
-      const x = R.racional(r, estado.premissas, R.ANOS);
-      if (r.erro) { rac.push([r.tipo, r.codigo, '', r.rotulo, 'ERRO', '', '', '', '', '', '', ...R.ANOS.map(() => ''), '', '', '', x.passos.join('\n')]); return; }
+      const x = R.racional(r, estado.premissas, R.ANOS, estado.cen);
+      if (r.erro) { rac.push([r.tipo, r.codigo, '', r.rotulo, 'ERRO', '', '', '', '', '', '', ...R.ANOS.map(() => ''), '', '', '', x.passos.join('\n'), '']); return; }
       const c = r.sugestao.classificacao;
       const ef = (a) => { const v = R.aliquotaEfetiva(c, prem(a)); return v === null ? '' : R.r2(v * 100) / 100; };
       rac.push([r.tipo, r.codigo, r.descricao, r.rotulo, ROTULO_SITUACAO[r.sugestao.situacao], r.sugestao.codigo, r.sugestao.cst, c ? c.descricaoTratamentoTributario : 'Tributação integral',
         c ? c.percentualReducaoCbs : 0, c ? c.percentualReducaoIbsUf : 0, c ? c.percentualReducaoIbsMun : 0, ...R.ANOS.map(ef),
         c && c._fund ? `${c._fund.textoCurto} – ${c._fund.texto}` : 'LC 214/2025 (regra geral)', r.is ? 'Sim' : 'Não',
-        c ? `CBS ${c.indicaApropriacaoCreditoAdquirenteCbs ? 'sim' : 'não'} / IBS ${c.indicaApropriacaoCreditoAdquirenteIbs ? 'sim' : 'não'}` : '', x.passos.join('\n')]);
-      x.alternativas.forEach((a) => alt.push([r.tipo, r.codigo, r.sugestao.codigo, a.codigo, a.cst, a.descricao, a.reducao, a.efetiva, a.base_legal, a.motivo]));
+        c ? `CBS ${c.indicaApropriacaoCreditoAdquirenteCbs ? 'sim' : 'não'} / IBS ${c.indicaApropriacaoCreditoAdquirenteIbs ? 'sim' : 'não'}` : '', x.passos.join('\n'), x.cenarioSugerida.enquadra.join('\n')]);
+      x.alternativas.forEach((a) => alt.push([r.tipo, r.codigo, r.sugestao.codigo, a.codigo, a.cst, a.descricao, a.reducao, a.efetiva, a.base_legal, a.motivo, a.cenarios.enquadra.join('\n'), a.cenarios.nao.join('\n'), a.cenarios.efeito, a.cenarios.fonte]));
     });
     const wsR = XLSX.utils.aoa_to_sheet(rac);
     wsR['!cols'] = [6, 11, 50, 25, 11, 12, 6, 25, 9, 9, 9, ...R.ANOS.map(() => 11), 60, 8, 18, 120].map((w) => ({ wch: w }));
     XLSX.utils.book_append_sheet(wb, wsR, 'Racional_cClassTrib');
     const wsA = XLSX.utils.aoa_to_sheet(alt);
-    wsA['!cols'] = [6, 11, 12, 11, 6, 70, 10, 12, 12, 70].map((w) => ({ wch: w }));
+    wsA['!cols'] = [6, 11, 12, 11, 6, 70, 10, 12, 12, 70, 80, 80, 60, 60].map((w) => ({ wch: w }));
     XLSX.utils.book_append_sheet(wb, wsA, 'Alternativas');
   }
 

@@ -32,6 +32,13 @@ dados['trat'] = {r[0]: {'desc': r[1], 'bc': r[2], 'al': r[3]} for r in q(f"""
 dados['isEx'] = [[r[0], r[1], fim(r[2])] for r in q("select EAVP_NCM_CD, EAVP_INICIO_VIGENCIA, EAVP_FIM_VIGENCIA from EXCECAO_AD_VALOREM_PRODUTO union select EARP_NCM_CD, EARP_INICIO_VIGENCIA, EARP_FIM_VIGENCIA from EXCECAO_AD_REM_PRODUTO")]
 dados['aliqRef'] = [{'valor': r[0], 'tributo': r[1], 'ini': r[2], 'fim': fim(r[3])} for r in q(
   "select ALRE_VALOR, TBTO_SIGLA, ALRE_INICIO_VIGENCIA, ALRE_FIM_VIGENCIA from ALIQUOTA_REFERENCIA join TRIBUTO on TBTO_ID=ALRE_TBTO_ID")]
+# atores exigidos (quem pode vender / comprar) por classificação de CBS/IBS
+atores = {}
+for cc, papel, ator in q(f"""select ct.CLTR_CD, ac.ATCL_IN_PAPEL, a.ATOR_DESCRICAO from ATOR_CLASSIFICACAO ac
+    join ATOR a on a.ATOR_ID=ac.ATCL_ATOR_ID join CLASSIFICACAO_TRIBUTARIA ct on ct.CLTR_ID=ac.ATCL_CLTR_ID
+    where {CBS} and (ac.ATCL_FIM_VIGENCIA is null or ac.ATCL_FIM_VIGENCIA >= '2026-01-01')"""):
+    atores.setdefault(cc, []).append({'papel': papel, 'ator': ' '.join(ator.split())})
+dados['atores'] = atores
 fd = {f['codigoClassificacaoTributaria']: {'textoCurto': f['textoCurto'], 'texto': f['texto']} for f in json.load(open(fund))}
 classes = json.load(open(cl))
 for k in classes:

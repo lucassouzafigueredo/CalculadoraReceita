@@ -83,6 +83,7 @@ curl -sf "$API/dados-abertos/versao" > "$TRAB/versao_api.json"
 python3 "$TR/extrair.py" calculadora/db/calculadora-pro.db "$TRAB/cl.json" "$TRAB/fund.json" "$TRAB/versao_api.json" "$TRAB/dados_rapido.json"
 python3 "$TR/montar.py" "$TR/modelo.html" "$TRAB/dados_rapido.json" "$SIM/web/js/regras.js" "$TR/motor_rapido.js" "$SAIDA/teste_rapido_rtc.html"
 cp "$SAIDA/teste_rapido_rtc.html" "$APP/web/teste_rapido_rtc.html"
+python3 -c "import json,sys; d=json.load(open(sys.argv[1])); json.dump({k: d[k] for k in ('atores','trat','regrasNcm','regrasNbs')}, open(sys.argv[2],'w'), ensure_ascii=False, separators=(',',':'))" "$TRAB/dados_rapido.json" "$APP/web/dados_cenarios.json"
 if [ -n "${E2E:-}" ]; then node "$TR/conferir.js" "$TRAB/dados_rapido.json" "$API"; fi
 echo ">> Conferindo o modo online (GitHub Pages) contra a calculadora oficial"
 node "$SIM/scripts/conferir_online.js" "$TRAB/dados_rapido.json" "$API" "$TRAB/dados_online.json"

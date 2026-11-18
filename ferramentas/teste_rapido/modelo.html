@@ -41,6 +41,9 @@ ol{margin:4px 0 8px;padding-left:0;list-style:none}ol li{margin-bottom:5px}
 .kpis{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px}
 .kpi b{font-size:18px;display:block}
 .alt td{white-space:normal}
+.cens{display:grid;gap:8px;margin-top:6px}.cen{border:1px solid var(--borda);border-left:4px solid var(--suave);border-radius:8px;padding:8px 10px;display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;background:var(--cartao)}
+.cen.sug{border-left-color:var(--pos)}.cen.alt{border-left-color:var(--alerta-t)}.cen-tit{grid-column:1/-1;font-weight:600}.cen ul{margin:3px 0 0;padding-left:18px}.cen-nota{grid-column:1/-1;font-size:12px}.cen-nota summary{cursor:pointer;color:var(--dest)}
+@media(max-width:900px){.cen{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -189,7 +192,7 @@ ol{margin:4px 0 8px;padding-left:0;list-style:none}ol li{margin-bottom:5px}
   }
 
   function detalhe(k, e, res, ano, P) {
-    const rac = R.racional(res, premissas, [ano]);
+    const rac = R.racional(res, premissas, [ano], DADOS);
     const c = res.sugestao.classificacao;
     const passos = rac.passos.map((p) => p.replace('premissas editáveis do passo 2 da tela', 'premissas do painel ao lado'));
     const ax = c ? anexoTxt(res, c.codigo) : '';
@@ -202,6 +205,14 @@ ol{margin:4px 0 8px;padding-left:0;list-style:none}ol li{margin-bottom:5px}
           const cl = M.classes.get(a.codigo) || null;
           return `<tr><td>${a.codigo}</td><td>${esc(a.descricao)}</td><td class="n">${fN.format(a.reducao)}%</td><td class="n">${pct(R.aliquotaEfetiva(cl, P))}</td><td>${esc(a.base_legal)}</td><td>${esc(anexoTxt(res, a.codigo))}</td><td>${esc(a.motivo)}</td></tr>`;
         }).join('') + '</tbody></table>';
+    }
+    const cart = (t, c, cl) => `<div class="cen ${cl}"><div class="cen-tit">${t}</div><div><b>Vale quando</b><ul>${c.enquadra.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` +
+      (c.nao.length ? `<div><b>Não vale quando</b><ul>${c.nao.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '') +
+      (c.efeito ? `<div class="cen-nota"><b>Efeito:</b> ${esc(c.efeito)}</div>` : '') + (c.fonte ? `<div class="cen-nota">${esc(c.fonte)}</div>` : '') +
+      `<details class="cen-nota"><summary>Base legal completa</summary>${esc(c.baseLegal)}</details></div>`;
+    if (rac.alternativas.length || res.sugestao.situacao !== 'INTEGRAL') {
+      h += '<b>Quando cada opção vale</b><div class="cens">' + cart(`Sugerida: ${res.sugestao.codigo}`, rac.cenarioSugerida, 'sug') +
+        rac.alternativas.map((a) => cart(`Alternativa: ${a.codigo} · efetiva ${pct(R.aliquotaEfetiva(M.classes.get(a.codigo) || null, P))}`, a.cenarios, 'alt')).join('') + '</div>';
     }
     return h + '</td></tr>';
   }

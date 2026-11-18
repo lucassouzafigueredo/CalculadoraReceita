@@ -1,3 +1,4 @@
 saida_teste/
 scripts/node_modules/
 scripts/package*.json
+web/dados_cenarios.json

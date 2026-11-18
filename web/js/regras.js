@@ -142,8 +142,94 @@
   const arred4 = (n) => (n === null || n === undefined ? null : Math.round(n * 10000) / 10000);
   const fmt = (n) => (n === null || n === undefined ? '–' : n.toLocaleString('pt-BR', { maximumFractionDigits: 4 }));
 
-  function motivoAlternativa(alt, escolhida) {
-    if (CONDICIONAL.test(alt.descricao || '')) return 'Depende de comprador/operação específica (ex.: órgão público, diferimento); use só se a venda se enquadrar.';
+  // Complementos onde os dados oficiais da calculadora não detalham a condição (texto legal truncado no banco).
+  const CENARIOS_EXTRA = {
+    '515001': {
+      enquadra: [
+        'Operação com insumo agropecuário/aquícola do Anexo IX em uma das hipóteses de diferimento do art. 138, § 2º da LC 214/2025:',
+        'Fornecimento feito por contribuinte do regime regular do IBS/CBS a outro contribuinte do regime regular ou a produtor rural não contribuinte;',
+        'Importação feita por contribuinte do regime regular ou por produtor rural não contribuinte.',
+        'Para produtor rural não contribuinte, o diferimento só alcança a parcela dos insumos usada na produção de bem vendido (§ 3º).',
+      ],
+      nao: [
+        'Vendedor do Simples Nacional ou MEI (não é regime regular) → use 200038 (redução de 60%, sem diferimento).',
+        'Venda a consumidor final, a empresa do Simples Nacional/MEI ou a não contribuinte que não seja produtor rural → use 200038.',
+        'Produto fora do Anexo IX → tributação integral (000001).',
+      ],
+      efeito: 'A alíquota é a mesma da 200038 (redução de 60%); muda o momento do recolhimento: o imposto não é pago nesta venda e o diferimento se encerra na etapa seguinte (§ 5º). Impacto de caixa e de crédito, não de alíquota.',
+      fonte: 'Resumo do art. 138, §§ 2º a 5º da LC 214/2025 (o texto completo não consta do banco da calculadora). Confira a redação oficial no Planalto antes de decidir.',
+    },
+  };
+
+  CENARIOS_EXTRA['200038'] = {
+    enquadra: ['Venda fora das hipóteses de diferimento do art. 138, § 2º (ex.: a consumidor final, a empresa do Simples Nacional/MEI ou a não contribuinte que não seja produtor rural).'],
+    nao: ['Venda por contribuinte do regime regular a outro contribuinte do regime regular ou a produtor rural não contribuinte, ou importação nessas condições → use 515001 (mesma alíquota, recolhimento diferido).'],
+    efeito: '',
+    fonte: 'Resumo do art. 138, §§ 2º a 5º da LC 214/2025 (o texto completo não consta do banco da calculadora). Confira a redação oficial no Planalto antes de decidir.',
+  };
+
+  function itensDoAnexo(codigo, cc, cen) {
+    if (!cen || !codigo) return [];
+    const regras = codigo.length === 9 ? cen.regrasNbs : cen.regrasNcm;
+    return (regras || []).filter((r) => r.c === cc && codigo.startsWith(r.p) && r.tx)
+      .filter((r, i, a) => a.findIndex((x) => x.ax === r.ax && x.it === r.it) === i);
+  }
+  const listaOu = (xs) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join('; ')} ou ${xs[xs.length - 1]}`);
+
+  /**
+   * Cenários de enquadramento de uma cClassTrib para um código (NCM/NBS), com dados oficiais:
+   * item do anexo (produto), atores exigidos (comprador/vendedor), tratamento (ex.: diferimento) e base legal.
+   * cen = { atores, trat, regrasNcm, regrasNbs } (retrato das tabelas); sugerida = classificação sugerida.
+   */
+  function cenarios(classif, codigo, cen, sugerida) {
+    const cc = classif ? classif.codigo : '000001';
+    const at = (cen && cen.atores && cen.atores[cc]) || [];
+    const compradores = at.filter((a) => a.papel === 'Adquirente').map((a) => a.ator);
+    const vendedores = at.filter((a) => a.papel === 'Fornecedor').map((a) => a.ator);
+    const anexo = itensDoAnexo(codigo, cc, cen);
+    const trat = cen && cen.trat && cen.trat[cc] ? cen.trat[cc].desc : '';
+    const extra = CENARIOS_EXTRA[cc];
+    const destino = sugerida && sugerida.codigo !== cc ? `${sugerida.codigo} (${sugerida.descricaoTratamentoTributario || sugerida.descricao})` : '000001 (tributação integral)';
+    const enquadra = [];
+    const nao = [];
+    if (!classif) {
+      enquadra.push('Produto/serviço sem enquadramento em anexo de redução, vendido em operação comum.');
+    }
+    anexo.forEach((i) => enquadra.push(`Produto: ${i.tx} (Anexo ${i.ax}, item ${i.it}).`));
+    if (anexo.length) nao.push(`O produto não corresponde a essa descrição, mesmo tendo a mesma NCM/NBS → use ${destino}.`);
+    if (compradores.length) {
+      enquadra.push(`Comprador: ${listaOu(compradores)}.`);
+      nao.push(`Venda a qualquer outro comprador (empresa privada, revenda, consumidor final) → use ${destino}.`);
+    }
+    if (vendedores.length) {
+      enquadra.push(`Vendedor: ${listaOu(vendedores)}.`);
+      nao.push(`Vendedor sem esse perfil → use ${destino}.`);
+    }
+    if (/diferimento/i.test(trat) && !extra) enquadra.push(`Operação: ${trat} — o imposto é calculado, mas o recolhimento fica para a etapa seguinte.`);
+    if (extra) { enquadra.push(...extra.enquadra); nao.push(...extra.nao); }
+    if (classif && !anexo.length && !compradores.length && !vendedores.length && !extra) {
+      enquadra.push('Sem restrição de comprador ou vendedor nos dados oficiais; vale a descrição da classificação e a base legal.');
+    }
+    const f = classif && classif._fund;
+    return {
+      codigo: cc, enquadra, nao, efeito: extra ? extra.efeito : '', fonte: extra ? extra.fonte : '',
+      compradores, vendedores, anexo: anexo.map((i) => `Anexo ${i.ax}, item ${i.it}: ${i.tx}`),
+      baseLegal: f ? (String(f.texto || '').startsWith(f.textoCurto) ? f.texto : `${f.textoCurto} – ${f.texto}`) : 'LC 214/2025, regra geral.',
+    };
+  }
+
+  function motivoAlternativa(alt, escolhida, codigo, cen) {
+    const at = (cen && cen.atores && cen.atores[alt.codigo]) || [];
+    const comp = at.filter((a) => a.papel === 'Adquirente').map((a) => a.ator);
+    const vend = at.filter((a) => a.papel === 'Fornecedor').map((a) => a.ator);
+    if (comp.length) return `Só vale se o comprador for: ${listaOu(comp)}.`;
+    if (vend.length) return `Só vale se o vendedor for: ${listaOu(vend)}.`;
+    if (alt.codigo === '515001') return 'Mesma redução, com recolhimento diferido: obrigatória nas operações do art. 138, § 2º (veja os cenários abaixo).';
+    if (alt.codigo === '200038' && escolhida && escolhida.codigo === '515001') return 'Sem diferimento: para vendas fora do art. 138, § 2º.';
+    const axAlt = itensDoAnexo(codigo, alt.codigo, cen).map((i) => i.tx);
+    const axEsc = escolhida ? itensDoAnexo(codigo, escolhida.codigo, cen).map((i) => i.tx) : [];
+    if (axAlt.length && axAlt.join() !== axEsc.join()) return `Só vale se o produto for: ${axAlt.join(' / ')}`;
+    if (CONDICIONAL.test(alt.descricao || '')) return 'Depende de comprador/operação específica; veja os cenários abaixo.';
     if (escolhida && (alt.percentualReducaoCbs || 0) < (escolhida.percentualReducaoCbs || 0)) return `Redução menor (${fmt(alt.percentualReducaoCbs)}% contra ${fmt(escolhida.percentualReducaoCbs)}%).`;
     if (!escolhida) return 'Benefício condicionado; sem enquadramento geral para esta NCM.';
     return 'Mesma redução; confira qual anexo descreve melhor o produto.';
@@ -164,7 +250,7 @@
    * res: { tipo, codigo, descricao, testadas, aceitas:[classif], sugestao, is, erro }
    * premissas: lista de premissas por ano (usa 2027 e 2033).
    */
-  function racional(res, premissas, anos = [2027, 2033]) {
+  function racional(res, premissas, anos = [2027, 2033], cen = null) {
     const anoRef = anos[anos.length - 1];
     if (res.erro) return { passos: [`${res.tipo} ${res.codigo}: ${res.erro}. Confira o código.`], alternativas: [] };
     const sug = res.sugestao;
@@ -195,13 +281,14 @@
       reducao: a.percentualReducaoCbs || 0,
       efetiva: arred4(aliquotaEfetiva(a, pAno(anoRef))), ano_efetiva: anoRef,
       base_legal: a._fund ? a._fund.textoCurto : '',
-      motivo: motivoAlternativa(a, c),
+      motivo: motivoAlternativa(a, c, res.codigo, cen),
+      cenarios: cenarios(a, res.codigo, cen, c),
     }));
     if (c && sug.codigo !== '000001') {
       alternativas.push({ codigo: '000001', cst: '000', descricao: 'Tributação integral (sem redução)', reducao: 0,
-        efetiva: arred4(aliquotaEfetiva(null, pAno(anoRef))), ano_efetiva: anoRef, base_legal: 'LC 214/2025', motivo: 'Só se o produto não se enquadrar na descrição do anexo.' });
+        efetiva: arred4(aliquotaEfetiva(null, pAno(anoRef))), ano_efetiva: anoRef, base_legal: 'LC 214/2025', motivo: 'Só se o produto não se enquadrar na descrição do anexo.', cenarios: cenarios(null, res.codigo, cen, c) });
     }
-    return { passos, alternativas };
+    return { passos, alternativas, cenarioSugerida: cenarios(c, res.codigo, cen, null) };
   }
 
   function descricaoNcm(info) {
@@ -530,7 +617,7 @@
 
   const API = {
     ANOS, UFS, PREMISSAS_PADRAO, COLUNAS_PREMISSAS, COLUNAS, EXEMPLOS, LIMITE_ITENS_POR_OPERACAO,
-    normalizarCabecalho, numero, codigo, LOCAL_PADRAO, sugerirClassificacao, aliquotaEfetiva, descricaoNcm, racional, contaAliquota, dataISO, dataHoraNoAno, validarLinhas, lerPremissas,
+    normalizarCabecalho, numero, codigo, LOCAL_PADRAO, sugerirClassificacao, aliquotaEfetiva, descricaoNcm, racional, contaAliquota, cenarios, dataISO, dataHoraNoAno, validarLinhas, lerPremissas,
     requisicaoBase, chaveBase, temIS, montarOperacoes, lerObjeto, metricas, somar, r2,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
