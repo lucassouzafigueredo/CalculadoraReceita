@@ -35,7 +35,7 @@
     }
 
     function sujeitoIS(ncm, data) {
-      return D.isNcm.some((r) => ncm.startsWith(r[0]) && vig(r[1], r[2], data));
+      return D.isNcm.some((r) => ncm.startsWith(r[0]) && vig(r[1], r[2], data)) && !(D.isEx || []).some((r) => ncm.startsWith(r[0]) && vig(r[1], r[2], data));
     }
 
     function descobrir(tipo, codigo, data) {

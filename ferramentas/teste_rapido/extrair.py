@@ -23,6 +23,15 @@ dados = {
   'regrasNbs': regras('NBS_APLICAVEL', 'NBSA', 'EXCECAO_NBS_APLICAVEL', 'ENBS'),
   'isNcm': [[r[0], r[1], fim(r[2])] for r in q("select AAVP_NCM_CD, AAVP_INICIO_VIGENCIA, AAVP_FIM_VIGENCIA from ALIQUOTA_AD_VALOREM_PRODUTO union select AARP_NCM_CD, AARP_INICIO_VIGENCIA, AARP_FIM_VIGENCIA from ALIQUOTA_AD_REM_PRODUTO")],
 }
+# tratamento tributário (expressões de base e alíquota) das classificações de CBS/IBS
+dados['trat'] = {r[0]: {'desc': r[1], 'bc': r[2], 'al': r[3]} for r in q(f"""
+  select ct.CLTR_CD, t.TRTR_DESCRICAO, t.TRTR_EXPRESSAO_BASE_CALCULO, t.TRTR_EXPRESSAO_ALIQUOTA
+  from TRATAMENTO_CLASSIFICACAO tc join CLASSIFICACAO_TRIBUTARIA ct on ct.CLTR_ID=tc.TRCL_CLTR_ID
+  join TRATAMENTO_TRIBUTARIO t on t.TRTR_ID=tc.TRCL_TRTR_ID
+  where {CBS} and (tc.TRCL_FIM_VIGENCIA is null or tc.TRCL_FIM_VIGENCIA >= '2026-01-01')""")}
+dados['isEx'] = [[r[0], r[1], fim(r[2])] for r in q("select EAVP_NCM_CD, EAVP_INICIO_VIGENCIA, EAVP_FIM_VIGENCIA from EXCECAO_AD_VALOREM_PRODUTO union select EARP_NCM_CD, EARP_INICIO_VIGENCIA, EARP_FIM_VIGENCIA from EXCECAO_AD_REM_PRODUTO")]
+dados['aliqRef'] = [{'valor': r[0], 'tributo': r[1], 'ini': r[2], 'fim': fim(r[3])} for r in q(
+  "select ALRE_VALOR, TBTO_SIGLA, ALRE_INICIO_VIGENCIA, ALRE_FIM_VIGENCIA from ALIQUOTA_REFERENCIA join TRIBUTO on TBTO_ID=ALRE_TBTO_ID")]
 fd = {f['codigoClassificacaoTributaria']: {'textoCurto': f['textoCurto'], 'texto': f['texto']} for f in json.load(open(fund))}
 classes = json.load(open(cl))
 for k in classes:
@@ -30,4 +39,4 @@ for k in classes:
     if k['codigo'] in fd: k['_fund'] = fd[k['codigo']]
 dados['classes'] = classes
 json.dump(dados, open(saida, 'w'), ensure_ascii=False, separators=(',', ':'))
-print('ncm', len(dados['ncm']), 'nbs', len(dados['nbs']), 'regrasNcm', len(dados['regrasNcm']), 'regrasNbs', len(dados['regrasNbs']), 'is', len(dados['isNcm']), 'classes', len(classes))
+print('ncm', len(dados['ncm']), 'nbs', len(dados['nbs']), 'regrasNcm', len(dados['regrasNcm']), 'regrasNbs', len(dados['regrasNbs']), 'is', len(dados['isNcm']), 'trat', len(dados['trat']), 'classes', len(classes))

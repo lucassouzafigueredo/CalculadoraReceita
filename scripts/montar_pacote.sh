@@ -84,6 +84,17 @@ python3 "$TR/extrair.py" calculadora/db/calculadora-pro.db "$TRAB/cl.json" "$TRA
 python3 "$TR/montar.py" "$TR/modelo.html" "$TRAB/dados_rapido.json" "$SIM/web/js/regras.js" "$TR/motor_rapido.js" "$SAIDA/teste_rapido_rtc.html"
 cp "$SAIDA/teste_rapido_rtc.html" "$APP/web/teste_rapido_rtc.html"
 if [ -n "${E2E:-}" ]; then node "$TR/conferir.js" "$TRAB/dados_rapido.json" "$API"; fi
+echo ">> Conferindo o modo online (GitHub Pages) contra a calculadora oficial"
+node "$SIM/scripts/conferir_online.js" "$TRAB/dados_rapido.json" "$API" "$TRAB/dados_online.json"
+echo ">> Montando o site (página inicial + teste rápido + simulador online)"
+python3 "$SIM/scripts/montar_site.py" "$SIM" "$TRAB/dados_online.json" "$SAIDA/teste_rapido_rtc.html" "$TRAB/versao_api.json" "$TRAB/site"
+if [ -n "${E2E:-}" ]; then
+  ( cd "$TRAB/site" && python3 -m http.server 18099 > /dev/null 2>&1 & echo $! > "$TRAB/pid_site" )
+  sleep 1
+  node "$SIM/scripts/teste_e2e.js" "http://localhost:18099/simulador/" "$TRAB/e2e_online"
+  kill "$(cat "$TRAB/pid_site")" || true
+fi
+( cd "$TRAB/site" && zip -qr "$SAIDA/site.zip" . )
 if [ -n "${E2E:-}" ]; then node "$SIM/scripts/teste_e2e.js" "http://localhost:$PORTA/api/simulador.html" "$TRAB/e2e"; fi
 kill "$(cat "$TRAB/pid")" || true
 echo "   referência OK (educação: CBS 42,24)"

@@ -30,6 +30,8 @@
 
   // ---------------- rede ----------------
   async function requisitar(metodo, caminho, corpo, tentativas = 3) {
+    // modo online (GitHub Pages): sem Java, responde com o retrato das tabelas oficiais
+    if (window.API_OFFLINE) return window.API_OFFLINE.requisitar(metodo, caminho, corpo);
     let ultimoErro;
     for (let t = 0; t < tentativas; t++) {
       try {
@@ -80,6 +82,15 @@
       estado.versao = v.dados;
       $('status-ponto').className = 'ponto ok';
       $('status-texto').innerHTML = `Calculadora oficial <b>v${esc(v.dados.versaoApp)}</b> · tabelas ${esc(v.dados.versaoDb)} de ${esc(formatarData(v.dados.dataVersaoDb))}`;
+      if (window.API_OFFLINE) {
+        const conf = window.DADOS_ONLINE && window.DADOS_ONLINE.conferido;
+        $('status-texto').innerHTML += ' · <b>modo online</b>';
+        const aviso = document.createElement('div');
+        aviso.className = 'aviso alerta';
+        aviso.innerHTML = `<b>Versão online.</b> Roda no seu navegador com um retrato das tabelas oficiais e as mesmas fórmulas da calculadora da Receita${conf ? `, conferida ao centavo em ${conf.comparacoes} cálculos (${conf.classes} cClassTrib)` : ''}. A planilha não sai do seu computador. ` +
+          'Casos especiais (imunidade, diferimento, suspensão, monofásico, Zona Franca) aparecem como "não disponível no modo online": para eles use o <a href="https://github.com/lucassouzafigueredo/CalculadoraReceita/releases/latest">simulador instalado</a>.';
+        document.querySelector('main').prepend(aviso);
+      }
     } else {
       $('status-ponto').className = 'ponto falha';
       $('status-texto').textContent = 'Calculadora não respondeu. Feche e abra o simulador novamente.';

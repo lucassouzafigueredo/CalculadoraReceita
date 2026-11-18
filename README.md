@@ -6,6 +6,18 @@ O usuário sobe uma planilha padrão e recebe carga atual × nova por ano de tra
 impacto em receita líquida e margem, reajuste de preço necessário e as inconsistências cadastrais
 (NCM × cClassTrib etc.) apontadas pela própria calculadora.
 
+## Online (sem instalar nada)
+
+- **Página inicial:** https://lucassouzafigueredo.github.io/CalculadoraReceita/
+- **Teste rápido:** https://lucassouzafigueredo.github.io/CalculadoraReceita/teste-rapido/
+- **Simulador (Excel):** https://lucassouzafigueredo.github.io/CalculadoraReceita/simulador/
+
+A versão online roda no navegador (a planilha não sai do computador) com um retrato das tabelas
+oficiais e as mesmas fórmulas da calculadora (`web/js/api_offline.js`). A cada publicação,
+`scripts/conferir_online.js` compara, ao centavo, centenas de cálculos com a calculadora oficial e só
+habilita no modo online as cClassTrib que batem; qualquer divergência bloqueia a publicação. Casos
+especiais (imunidade, diferimento, suspensão, monofásico, ZFM) ficam para o simulador instalado.
+
 ## Para o usuário final (Windows)
 
 Não precisa de Python, Git nem Java.

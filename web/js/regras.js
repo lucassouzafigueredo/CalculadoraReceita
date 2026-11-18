@@ -324,8 +324,8 @@
         if (!/^\d{3}$/.test(l.is_cst)) p('is_cst', 'Imposto Seletivo: CST deve ter 3 dígitos');
         if (!/^\d{6}$/.test(l.is_cclasstrib)) p('is_cclasstrib', 'Imposto Seletivo: cClassTrib deve ter 6 dígitos');
         if (l.is_aliquota === null) {
-          p('is_aliquota', 'Produto sujeito ao Imposto Seletivo, mas sem alíquota (ainda não fixada em lei): IS não será calculado. Informe is_aliquota para simular.', 'alerta');
-          l.is_cst = ''; l.is_cclasstrib = '';
+          p('is_aliquota', 'Produto sujeito ao Imposto Seletivo sem alíquota definida em lei: simulado com IS de 0%. Informe is_aliquota para simular o IS.', 'alerta');
+          l.is_aliquota = 0;
         }
       }
 
