@@ -20,6 +20,19 @@ Não precisa de Python, Git nem Java.
 A cada abertura o lançador verifica o último Release e se atualiza sozinho (só a pasta `app`,
 ~90 MB; o Java embutido é mantido). Tudo roda localmente: a planilha não sai do computador.
 
+## Teste rápido (um único HTML, sem instalar nada)
+
+`ferramentas/teste_rapido_rtc.html` — abra com dois cliques. Cole NCMs/NBS (opcionalmente `;valor;descrição`)
+e veja na hora cClassTrib, CST, redução, alíquota efetiva, CBS/IBS e o racional com o **item exato do anexo**;
+busca de NCM pela descrição e "Copiar p/ Excel". Funciona offline: leva um retrato das tabelas oficiais.
+
+- Versão sempre atual: [releases/latest/download/teste_rapido_rtc.html](https://github.com/lucassouzafigueredo/CalculadoraReceita/releases/latest/download/teste_rapido_rtc.html)
+  (regerado pelo workflow a cada atualização da calculadora; também vai dentro do pacote Windows).
+- A cada geração, `ferramentas/teste_rapido/conferir.js` compara o resultado com o validador oficial da
+  calculadora (~43 mil combinações NCM/NBS × cClassTrib); qualquer divergência impede a publicação.
+- Simplificação: o valor informado é tratado como base de cálculo. Para bases com frete/desconto/tributos
+  antigos e comparativo de margem, use o simulador completo.
+
 ## Como fica sempre atualizado com o GitHub da Receita
 
 ```
@@ -91,6 +104,9 @@ CalculadoraReceita/
   pacote/              lançadores Windows (bat + PowerShell), config.json, LEIA-ME
   .github/workflows/simulador-rtc.yml   verificação diária, montagem, testes e Release
   docs/prompt_simulador_rtc.md          prompt original da ideia (referência)
+  ferramentas/
+    teste_rapido_rtc.html             teste rápido pronto (retrato atual)
+    teste_rapido/                     gerador: extrair.py, montar.py, modelo.html, motor_rapido.js, conferir.js
   scripts/
     montar_pacote.sh   clona a calculadora, compila, testa e gera os zips
     teste_regras.js    testes unitários (node)

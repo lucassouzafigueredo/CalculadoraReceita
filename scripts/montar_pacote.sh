@@ -35,7 +35,7 @@ echo ">> Compilando a calculadora"
 $MVN -q clean package -DskipTests --batch-mode
 VERSAO_APP="$($MVN -q help:evaluate -Dexpression=project.version -DforceStdout --batch-mode 2>/dev/null | tail -1)"
 VERSAO_DB="$(ls flyway/sql | sed -n 's/^\(V[0-9]*\)__.*/\1/p' | sort -V | tail -1)"
-HASH_SIM="$(cd "$SIM" && git ls-tree HEAD web pacote scripts 2>/dev/null | sha1sum | cut -c1-7)"
+HASH_SIM="$(cd "$SIM" && git ls-tree HEAD web pacote scripts ferramentas/teste_rapido 2>/dev/null | sha1sum | cut -c1-7)"
 PACOTE="v${VERSAO_APP}-${COMMIT:0:7}-s${HASH_SIM}"
 
 echo ">> Montando app/ (pacote $PACOTE)"
@@ -74,6 +74,16 @@ curl -sf "http://localhost:$PORTA/api/simulador.html" | grep -q "Simulador" || {
 RESP="$(curl -sf -X POST "http://localhost:$PORTA/api/calculadora/observabilidade/regime-geral" -H 'Content-Type: application/json' \
   -d '{"id":"t","versao":"1.0.0","dhFatoGerador":"2027-03-10T10:00:00-03:00","municipio":4314902,"uf":"RS","itens":[{"numero":1,"nbs":"122011200","cst":"200","cClassTrib":"200028","baseCalculo":1200.00,"aliquotasNominais":{"cbs":8.8,"ibsEstadual":0.05,"ibsMunicipal":0.05}}]}')"
 echo "$RESP" | grep -q '"vCBS":"42.24"' || { echo "Cálculo de referência divergiu: $RESP"; exit 1; }
+echo ">> Gerando o teste rápido (HTML offline com as tabelas desta versão)"
+TR="$SIM/ferramentas/teste_rapido"
+API="http://localhost:$PORTA/api/calculadora"
+curl -sf "$API/dados-abertos/classificacoes-tributarias/cbs-ibs?data=2027-01-01" > "$TRAB/cl.json"
+curl -sf "$API/dados-abertos/fundamentacoes-legais?data=2027-01-01" > "$TRAB/fund.json"
+curl -sf "$API/dados-abertos/versao" > "$TRAB/versao_api.json"
+python3 "$TR/extrair.py" calculadora/db/calculadora-pro.db "$TRAB/cl.json" "$TRAB/fund.json" "$TRAB/versao_api.json" "$TRAB/dados_rapido.json"
+python3 "$TR/montar.py" "$TR/modelo.html" "$TRAB/dados_rapido.json" "$SIM/web/js/regras.js" "$TR/motor_rapido.js" "$SAIDA/teste_rapido_rtc.html"
+cp "$SAIDA/teste_rapido_rtc.html" "$APP/web/teste_rapido_rtc.html"
+if [ -n "${E2E:-}" ]; then node "$TR/conferir.js" "$TRAB/dados_rapido.json" "$API"; fi
 if [ -n "${E2E:-}" ]; then node "$SIM/scripts/teste_e2e.js" "http://localhost:$PORTA/api/simulador.html" "$TRAB/e2e"; fi
 kill "$(cat "$TRAB/pid")" || true
 echo "   referência OK (educação: CBS 42,24)"

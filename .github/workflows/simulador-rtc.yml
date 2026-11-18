@@ -17,6 +17,7 @@ on:
       - 'web/**'
       - 'pacote/**'
       - 'scripts/**'
+      - 'ferramentas/teste_rapido/**'
       - '.github/workflows/simulador-rtc.yml'
 
 permissions:
@@ -38,7 +39,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           COMMIT=$(git ls-remote https://github.com/ReceitaFederal/calculadora-rtc-regime-regular.git refs/heads/main | cut -c1-7)
-          HASH=$(git ls-tree HEAD web pacote scripts | sha1sum | cut -c1-7)
+          HASH=$(git ls-tree HEAD web pacote scripts ferramentas/teste_rapido | sha1sum | cut -c1-7)
           echo "Calculadora oficial: $COMMIT | simulador: $HASH"
           if gh release list --limit 200 --json tagName -q '.[].tagName' | grep -q -- "-${COMMIT}-s${HASH}$" \
              && [ "${{ github.event.inputs.forcar }}" != "true" ]; then
@@ -155,10 +156,12 @@ jobs:
             echo "**Primeira instalação:** baixe \`Simulador-RTC-Windows.zip\`, extraia e dê dois cliques em \`Iniciar Simulador.bat\`."
             echo "Quem já tem o simulador instalado recebe esta versão automaticamente ao abrir."
             echo
+            echo "**Teste rápido (HTML único, sem instalar nada):** baixe \`teste_rapido_rtc.html\` e abra no navegador."
+            echo
             echo '```json'; cat dist/versao.json; echo '```'
             echo
             echo "### Novidades da calculadora oficial"
             cat dist/notas.md
           } > dist/corpo.md
-          gh release create "$PACOTE" dist/Simulador-RTC-Windows.zip dist/atualizacao-simulador-rtc.zip dist/versao.json \
+          gh release create "$PACOTE" dist/Simulador-RTC-Windows.zip dist/atualizacao-simulador-rtc.zip dist/versao.json dist/teste_rapido_rtc.html \
             --title "Simulador RTC $PACOTE" --notes-file dist/corpo.md --target "$GITHUB_SHA" --latest

@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teste Rápido RTC</title>
+<style>
+:root{--fundo:#f5f6f8;--cartao:#fff;--texto:#1d2330;--suave:#5b6475;--borda:#e1e4ea;--dest:#1f5fbf;--dest-t:#fff;--pos:#1b7f4b;--neg:#b42318;--alerta:#fff4e5;--alerta-t:#8a4b00;--ok:#e8f5ee;--erro:#fdecea;--par:#fafbfc}
+@media (prefers-color-scheme:dark){:root{--fundo:#12151b;--cartao:#1b1f27;--texto:#e7eaf0;--suave:#a0a8b8;--borda:#2c323d;--dest:#5b9bff;--dest-t:#0b1220;--pos:#4cc38a;--neg:#ff7b72;--alerta:#3a2a12;--alerta-t:#f5c27a;--ok:#12301f;--erro:#3a1a1a;--par:#1f242d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--fundo);color:var(--texto);font:14px/1.45 "Segoe UI",system-ui,sans-serif}
+header{background:var(--cartao);border-bottom:1px solid var(--borda);padding:12px 16px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center}
+h1{font-size:18px;margin:0}
+.sub{color:var(--suave);font-size:12px}
+main{display:grid;grid-template-columns:360px 1fr;gap:14px;padding:14px;max-width:1500px;margin:0 auto}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.cartao{background:var(--cartao);border:1px solid var(--borda);border-radius:10px;padding:14px;margin-bottom:14px}
+h2{font-size:14px;margin:0 0 8px}
+textarea,input,select{font:inherit;color:var(--texto);background:var(--fundo);border:1px solid var(--borda);border-radius:6px;padding:6px 8px}
+textarea{width:100%;font-family:ui-monospace,Consolas,monospace;font-size:13px;min-height:180px;resize:vertical}
+input[type=number]{width:72px;text-align:right}
+.linha{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}
+.botao{background:var(--dest);color:var(--dest-t);border:0;border-radius:6px;padding:7px 12px;font-weight:600;cursor:pointer}
+.botao.sec{background:transparent;color:var(--dest);border:1px solid var(--dest)}
+.nota{font-size:12px;color:var(--suave)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--borda);text-align:left;vertical-align:top}
+th{position:sticky;top:0;background:var(--cartao);font-weight:600}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.item{cursor:pointer}
+tr.item:hover td{background:var(--par)}
+tr.det td{background:var(--par)}
+.rol{overflow:auto;max-height:calc(100vh - 150px);border:1px solid var(--borda);border-radius:8px}
+.et{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap}
+.AUTOMATICA{background:var(--ok);color:var(--pos)}.REVISAR{background:var(--alerta);color:var(--alerta-t)}.INTEGRAL{background:var(--par);color:var(--suave);border:1px solid var(--borda)}.ERRO{background:var(--erro);color:var(--neg)}
+.cod{font-family:ui-monospace,Consolas,monospace;font-weight:600}
+ol{margin:4px 0 8px;padding-left:0;list-style:none}ol li{margin-bottom:5px}
+.busca-res{max-height:260px;overflow:auto;margin-top:6px}
+.busca-res div{padding:4px 6px;border-bottom:1px solid var(--borda);cursor:pointer;font-size:12px}
+.busca-res div:hover{background:var(--par)}
+.kpis{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px}
+.kpi b{font-size:18px;display:block}
+.alt td{white-space:normal}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Teste rápido · Reforma Tributária</h1>
+  <div class="sub" id="versao"></div></div>
+  <div class="sub">Uso pessoal · retrato offline das tabelas da calculadora oficial · simulador completo: CalculadoraReceita</div>
+</header>
+<main>
+  <section>
+    <div class="cartao">
+      <h2>Códigos</h2>
+      <div class="nota">Um por linha: <code>NCM ou NBS</code> · opcional <code>;valor</code> · opcional <code>;descrição</code></div>
+      <textarea id="entrada" spellcheck="false">02013000;100;Carne
+10063021;50;Arroz 5kg
+33051000;30;Xampu
+90183119;1000
+122011200;1200;Pré-escola
+22030000;150;Cerveja</textarea>
+      <div class="linha">
+        <label>Ano <select id="ano"></select></label>
+        <button class="botao sec" id="copiar">Copiar p/ Excel</button>
+        <button class="botao sec" id="limpar">Limpar</button>
+      </div>
+    </div>
+    <div class="cartao">
+      <h2>Premissas do ano <span id="ano-prem"></span></h2>
+      <div class="linha" id="premissas"></div>
+      <div class="nota" id="nota-prem"></div>
+      <button class="botao sec" id="restaurar" style="margin-top:6px">Restaurar padrão</button>
+    </div>
+    <div class="cartao">
+      <h2>Buscar NCM/NBS pela descrição</h2>
+      <input id="busca" placeholder="ex.: xampu, café, fralda, consultoria" style="width:100%">
+      <div class="busca-res" id="busca-res"></div>
+      <div class="nota">Clique num resultado para adicionar à lista.</div>
+    </div>
+  </section>
+  <section>
+    <div class="cartao">
+      <div class="kpis" id="kpis"></div>
+      <div class="rol"><table>
+        <thead><tr><th>Código</th><th>Descrição</th><th>cClassTrib</th><th>Situação</th><th class="n">Redução</th><th class="n">Alíq. efetiva</th><th class="n">Valor</th><th class="n">CBS</th><th class="n">IBS</th><th class="n">Total</th><th>IS</th></tr></thead>
+        <tbody id="corpo"></tbody>
+      </table></div>
+      <div class="nota" style="margin-top:6px">Clique numa linha para ver o racional. "Revisar" abre sozinho: há mais de uma possibilidade.</div>
+    </div>
+  </section>
+</main>
+<script>const DADOS = /*DADOS*/;</script>
+<script>/*REGRAS*/</script>
+<script>/*MOTOR*/</script>
+<script>
+(function () {
+  'use strict';
+  const R = window.Regras, M = criarMotor(DADOS);
+  const $ = (id) => document.getElementById(id);
+  const fN = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
+  const fR = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+  const pct = (v) => (v === null || !isFinite(v) ? '–' : fN.format(v) + '%');
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const TESTE_2026 = { ano: 2026, cbs: 0.9, ibs_uf: 0.1, ibs_mun: 0 };
+  const ROT = { AUTOMATICA: 'Automática', REVISAR: 'Revisar', INTEGRAL: 'Integral', ERRO: 'Erro' };
+  const ROMANO = (n) => n;
+  const v = DADOS.versao;
+  $('versao').textContent = `Calculadora oficial v${v.versaoApp} · tabelas ${v.versaoDb} de ${v.dataVersaoDb.split('-').reverse().join('/')} · retrato gerado em /*GERADO*/`;
+
+  let premissas;
+  try { premissas = JSON.parse(localStorage.getItem('rtc-premissas')) || null; } catch (e) { premissas = null; }
+  if (!premissas) premissas = R.PREMISSAS_PADRAO.map((p) => ({ ...p }));
+  const salvar = () => { try { localStorage.setItem('rtc-premissas', JSON.stringify(premissas)); } catch (e) {} };
+  const premAno = (a) => premissas.find((p) => p.ano === a);
+  const efetivas = (a) => (a === 2026 ? TESTE_2026 : premAno(a));
+
+  $('ano').innerHTML = R.ANOS.map((a) => `<option ${a === 2033 ? 'selected' : ''}>${a}</option>`).join('');
+  try { const a = localStorage.getItem('rtc-ano'); if (a) $('ano').value = a; } catch (e) {}
+
+  function renderPremissas() {
+    const a = +$('ano').value, p = premAno(a);
+    $('ano-prem').textContent = a;
+    if (a === 2026) {
+      $('premissas').innerHTML = '<span>CBS 0,9% · IBS UF 0,1% · IBS Mun 0%</span>';
+      $('nota-prem').textContent = '2026: alíquotas oficiais de teste, compensáveis com PIS/COFINS (não são custo).';
+      return;
+    }
+    $('premissas').innerHTML = [['cbs', 'CBS'], ['ibs_uf', 'IBS UF'], ['ibs_mun', 'IBS Mun']]
+      .map(([k, r]) => `<label>${r} <input type="number" step="0.01" data-k="${k}" value="${p[k]}">%</label>`).join('');
+    $('nota-prem').textContent = 'Estimativas editáveis (a lei exige informá-las a partir de 2027). Ficam salvas neste navegador.';
+  }
+
+  function ler() {
+    return $('entrada').value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
+      const [c, val, ...d] = l.split(/[;\t]/);
+      const dig = String(c).replace(/\D/g, '');
+      const tipo = dig.length === 8 ? 'NCM' : dig.length === 9 ? 'NBS' : null;
+      const valor = val === undefined || val.trim() === '' ? null : Number(val.trim().replace(/\./g, '').replace(',', '.'));
+      return { tipo, codigo: tipo ? dig : c.trim(), valor: isFinite(valor) ? valor : null, rotulo: d.join(' ').trim() };
+    });
+  }
+
+  function anexoTxt(res, cc) {
+    const its = res.anexo ? res.anexo(cc) : [];
+    return its.filter((i) => i.tx).map((i) => `Anexo ${i.ax}, item ${i.it}: ${i.tx}`).join(' | ');
+  }
+
+  let linhasAtuais = [];
+  function calcular() {
+    const ano = +$('ano').value, dataRef = `${ano}-01-01`, P = efetivas(ano);
+    const abertos = new Set([...document.querySelectorAll('tr.det')].map((t) => t.dataset.k));
+    let h = '', tot = { valor: 0, cbs: 0, ibs: 0 }, cont = {};
+    linhasAtuais = ler().map((e, i) => {
+      const k = `${i}|${e.codigo}`;
+      if (!e.tipo) return { e, k, res: { tipo: 'Código', codigo: e.codigo, erro: 'não tem 8 dígitos (NCM) nem 9 (NBS)' } };
+      const res = M.descobrir(e.tipo, e.codigo, dataRef < '2027-01-01' ? '2027-01-01' : dataRef);
+      if (!res.erro) res.sugestao = R.sugerirClassificacao(res.aceitas);
+      return { e, k, res };
+    });
+    linhasAtuais.forEach(({ e, k, res }) => {
+      const situ = res.erro ? 'ERRO' : res.sugestao.situacao;
+      cont[situ] = (cont[situ] || 0) + 1;
+      if (res.erro) {
+        h += `<tr class="item"><td class="cod">${esc(e.codigo)}</td><td colspan="9">${esc(res.erro)}</td><td><span class="et ERRO">Erro</span></td></tr>`;
+        return;
+      }
+      const c = res.sugestao.classificacao;
+      const red = (f) => (c ? c[f] || 0 : 0) / 100;
+      const ef = R.aliquotaEfetiva(c, P);
+      const vCbs = e.valor !== null ? e.valor * P.cbs * (1 - red('percentualReducaoCbs')) / 100 : null;
+      const vIbs = e.valor !== null ? e.valor * (P.ibs_uf * (1 - red('percentualReducaoIbsUf')) + P.ibs_mun * (1 - red('percentualReducaoIbsMun'))) / 100 : null;
+      if (e.valor !== null) { tot.valor += e.valor; tot.cbs += vCbs; tot.ibs += vIbs; }
+      Object.assign(res, { _ef: ef, _vCbs: vCbs, _vIbs: vIbs });
+      h += `<tr class="item" data-k="${esc(k)}"><td class="cod">${res.codigo}<div class="nota">${res.tipo}</div></td>
+        <td>${esc(res.descricao)}${e.rotulo ? `<div class="nota">${esc(e.rotulo)}</div>` : ''}</td>
+        <td><b>${res.sugestao.codigo}</b><div class="nota">CST ${res.sugestao.cst}</div></td>
+        <td><span class="et ${situ}">${ROT[situ]}</span></td>
+        <td class="n">${fN.format(c ? c.percentualReducaoCbs : 0)}%</td><td class="n"><b>${pct(ef)}</b></td>
+        <td class="n">${e.valor !== null ? fR.format(e.valor) : ''}</td><td class="n">${vCbs !== null ? fR.format(vCbs) : ''}</td>
+        <td class="n">${vIbs !== null ? fR.format(vIbs) : ''}</td><td class="n">${vCbs !== null ? fR.format(vCbs + vIbs) : ''}</td>
+        <td>${res.is ? '<span class="et REVISAR">IS</span>' : ''}</td></tr>`;
+      if (situ === 'REVISAR' || abertos.has(k)) h += detalhe(k, e, res, ano, P);
+    });
+    $('corpo').innerHTML = h || '<tr><td colspan="11" class="nota">Cole códigos ao lado.</td></tr>';
+    $('kpis').innerHTML = `<div class="kpi"><span class="nota">Códigos</span><b>${linhasAtuais.length}</b></div>` +
+      Object.entries(cont).map(([s, n]) => `<div class="kpi"><span class="nota">${ROT[s]}</span><b>${n}</b></div>`).join('') +
+      (tot.valor ? `<div class="kpi"><span class="nota">Valor</span><b>${fR.format(tot.valor)}</b></div><div class="kpi"><span class="nota">CBS+IBS ${ano}</span><b>${fR.format(tot.cbs + tot.ibs)}</b></div><div class="kpi"><span class="nota">Carga média</span><b>${pct((tot.cbs + tot.ibs) / tot.valor * 100)}</b></div>` : '');
+  }
+
+  function detalhe(k, e, res, ano, P) {
+    const rac = R.racional(res, premissas);
+    const c = res.sugestao.classificacao;
+    const passos = rac.passos.map((p) => p.replace('premissas editáveis do passo 2 da tela', 'premissas do painel ao lado'));
+    const ax = c ? anexoTxt(res, c.codigo) : '';
+    if (ax) passos.splice(2, 0, `2b. Onde o produto aparece no anexo: ${ax}.`);
+    if (e.valor !== null) passos.push(`Cálculo ${ano}${ano === 2026 ? ' (teste, compensável)' : ''}: ${fR.format(e.valor)} × ${fN.format(res._ef)}% = ${fR.format(res._vCbs + res._vIbs)} (CBS ${fR.format(res._vCbs)} + IBS ${fR.format(res._vIbs)}).`);
+    let h = `<tr class="det" data-k="${esc(k)}"><td></td><td colspan="10"><b>Racional</b><ol>${passos.map((p) => `<li>${esc(p)}</li>`).join('')}</ol>`;
+    if (rac.alternativas.length) {
+      h += '<b>Alternativas</b><table class="alt"><thead><tr><th>cClassTrib</th><th>Descrição</th><th class="n">Redução</th><th class="n">Efetiva ' + ano + '</th><th>Base legal</th><th>Item do anexo</th><th>Por que não foi a sugerida</th></tr></thead><tbody>' +
+        rac.alternativas.map((a) => {
+          const cl = M.classes.get(a.codigo) || null;
+          return `<tr><td>${a.codigo}</td><td>${esc(a.descricao)}</td><td class="n">${fN.format(a.reducao)}%</td><td class="n">${pct(R.aliquotaEfetiva(cl, P))}</td><td>${esc(a.base_legal)}</td><td>${esc(anexoTxt(res, a.codigo))}</td><td>${esc(a.motivo)}</td></tr>`;
+        }).join('') + '</tbody></table>';
+    }
+    return h + '</td></tr>';
+  }
+
+  $('corpo').addEventListener('click', (ev) => {
+    const tr = ev.target.closest('tr.item');
+    if (!tr || !tr.dataset.k) return;
+    const prox = tr.nextElementSibling;
+    if (prox && prox.classList.contains('det')) { prox.remove(); return; }
+    const l = linhasAtuais.find((x) => x.k === tr.dataset.k);
+    const ano = +$('ano').value;
+    tr.insertAdjacentHTML('afterend', detalhe(l.k, l.e, l.res, ano, efetivas(ano)));
+  });
+
+  let tmr;
+  $('entrada').addEventListener('input', () => { clearTimeout(tmr); tmr = setTimeout(calcular, 200); });
+  $('ano').addEventListener('change', () => { try { localStorage.setItem('rtc-ano', $('ano').value); } catch (e) {} renderPremissas(); calcular(); });
+  $('premissas').addEventListener('input', (ev) => {
+    const k = ev.target.dataset.k; if (!k) return;
+    const n = Number(String(ev.target.value).replace(',', '.'));
+    premAno(+$('ano').value)[k] = isFinite(n) ? n : 0; salvar(); calcular();
+  });
+  $('restaurar').addEventListener('click', () => { premissas = R.PREMISSAS_PADRAO.map((p) => ({ ...p })); salvar(); renderPremissas(); calcular(); });
+  $('limpar').addEventListener('click', () => { $('entrada').value = ''; calcular(); });
+  $('busca').addEventListener('input', () => {
+    clearTimeout(tmr);
+    tmr = setTimeout(() => {
+      const t = $('busca').value.trim();
+      $('busca-res').innerHTML = t.length < 3 ? '' : M.buscar(t).map((r) => `<div data-c="${r.codigo}"><span class="cod">${r.codigo}</span> ${esc(r.descricao)}</div>`).join('') || '<div class="nota">Nada encontrado.</div>';
+    }, 250);
+  });
+  $('busca-res').addEventListener('click', (ev) => {
+    const d = ev.target.closest('[data-c]'); if (!d) return;
+    $('entrada').value = ($('entrada').value.trim() + '\n' + d.dataset.c).trim(); calcular();
+  });
+  $('copiar').addEventListener('click', () => {
+    const ano = +$('ano').value;
+    const cab = ['codigo', 'tipo', 'descricao', 'cclasstrib', 'cst', 'situacao', 'reducao_%', `aliq_efetiva_${ano}_%`, 'valor', 'cbs', 'ibs', 'total', 'imposto_seletivo', 'base_legal', 'alternativas'];
+    const linhas = linhasAtuais.map(({ e, res }) => {
+      if (res.erro) return [e.codigo, '', res.erro];
+      const c = res.sugestao.classificacao, f = (n) => (n === null || n === undefined ? '' : String(Math.round(n * 100) / 100).replace('.', ','));
+      return [res.codigo, res.tipo, res.descricao, res.sugestao.codigo, res.sugestao.cst, ROT[res.sugestao.situacao], c ? c.percentualReducaoCbs : 0, f(res._ef), f(e.valor), f(res._vCbs), f(res._vIbs), res._vCbs !== null ? f(res._vCbs + res._vIbs) : '', res.is ? 'Sim' : 'Não',
+        c && c._fund ? c._fund.textoCurto : 'LC 214/2025', res.sugestao.alternativas.map((a) => a.codigo).join(', ')];
+    });
+    const tsv = [cab, ...linhas].map((l) => l.join('\t')).join('\n');
+    navigator.clipboard.writeText(tsv).then(() => { $('copiar').textContent = 'Copiado!'; setTimeout(() => { $('copiar').textContent = 'Copiar p/ Excel'; }, 1500); });
+  });
+
+  renderPremissas();
+  calcular();
+})();
+</script>
+</body>
+</html>
