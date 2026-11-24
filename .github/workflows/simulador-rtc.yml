@@ -55,10 +55,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Versão do Java exigida pela calculadora oficial
+        id: jv
+        run: |
+          JV=$(curl -sf https://raw.githubusercontent.com/ReceitaFederal/calculadora-rtc-regime-regular/main/pom.xml | sed -n 's:.*<java.version>\([0-9]*\)</java.version>.*:\1:p' | head -1)
+          echo "Java exigido pela calculadora: ${JV:-21}"
+          echo "versao=${JV:-21}" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: ${{ steps.jv.outputs.versao }}
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -133,6 +139,29 @@ jobs:
           if (-not $desligou) { throw 'A calculadora continuou ligada depois de fechar a janela' }
           if (-not $lancador.WaitForExit(30000)) { throw 'O lançador não terminou' }
           Write-Host 'OK: fechar a janela desligou a calculadora'
+      - name: Java desatualizado é trocado sozinho pelo lançador
+        shell: pwsh
+        run: |
+          $r = 'C:\teste\Simulador-RTC'
+          New-Item -ItemType Directory -Force C:\fakerel | Out-Null
+          Copy-Item dist\jre-windows-x64.zip C:\fakerel\
+          '{"tag_name":"teste","assets":[{"name":"jre-windows-x64.zip","browser_download_url":"http://127.0.0.1:8777/jre-windows-x64.zip"}]}' | Set-Content C:\fakerel\latest.json
+          $srv = Start-Process python -ArgumentList '-m','http.server','8777','--directory','C:\fakerel' -PassThru -WindowStyle Hidden
+          Start-Sleep 3
+          (Get-Content "$r\jre\release") -replace 'JAVA_VERSION="\d+', 'JAVA_VERSION="17' | Set-Content "$r\jre\release"
+          $cfg = Get-Content "$r\config.json" -Raw | ConvertFrom-Json
+          $cfg.verificar_atualizacao = $false
+          $cfg.url_atualizacao = 'http://127.0.0.1:8777/latest.json'
+          $cfg | ConvertTo-Json | Set-Content "$r\config.json"
+          $env:SIMULADOR_SEM_NAVEGADOR = '1'
+          powershell -NoProfile -ExecutionPolicy Bypass -File "$r\scripts\iniciar.ps1"
+          if ($LASTEXITCODE -ne 0) { Get-Content "$r\logs\*"; throw 'O simulador não iniciou depois da troca do Java' }
+          $versao = (Select-String -Path "$r\jre\release" -Pattern 'JAVA_VERSION="(\d+)').Matches[0].Groups[1].Value
+          Write-Host "Java depois da troca: $versao"
+          if ($versao -eq '17') { throw 'O Java não foi trocado' }
+          powershell -NoProfile -ExecutionPolicy Bypass -File "$r\scripts\encerrar.ps1"
+          Stop-Process -Id $srv.Id -Force -ErrorAction SilentlyContinue
+          Write-Host 'OK: o lançador trocou o Java desatualizado'
 
   publicar:
     needs: [montar, testar-windows]
@@ -163,7 +192,7 @@ jobs:
             echo "### Novidades da calculadora oficial"
             cat dist/notas.md
           } > dist/corpo.md
-          gh release create "$PACOTE" dist/Simulador-RTC-Windows.zip dist/atualizacao-simulador-rtc.zip dist/versao.json dist/teste_rapido_rtc.html dist/site.zip \
+          gh release create "$PACOTE" dist/Simulador-RTC-Windows.zip dist/atualizacao-simulador-rtc.zip dist/versao.json dist/teste_rapido_rtc.html dist/site.zip dist/jre-windows-x64.zip \
             --title "Simulador RTC $PACOTE" --notes-file dist/corpo.md --target "$GITHUB_SHA" --latest
 
   # Publica no GitHub Pages: página inicial, teste rápido e simulador online:

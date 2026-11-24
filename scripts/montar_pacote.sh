@@ -16,13 +16,23 @@ SEM_JRE="${3:-}"
 SIM="$(cd "$(dirname "$0")/.." && pwd)"
 TRAB="$(mktemp -d)"
 REPO_OFICIAL="https://github.com/ReceitaFederal/calculadora-rtc-regime-regular.git"
-JRE_URL="https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jre/hotspot/normal/eclipse"
 
 echo ">> Baixando a calculadora oficial ($REF)"
 git clone --depth 1 --branch "$REF" "$REPO_OFICIAL" "$TRAB/calc"
 cd "$TRAB/calc"
 COMMIT="$(git rev-parse HEAD)"
 DATA_COMMIT="$(git log -1 --format=%cI)"
+
+# versão do Java exigida pela calculadora oficial (pom.xml): usada para compilar e no Java embutido do pacote
+JAVA_EXIGIDO="$(sed -n 's:.*<java.version>\([0-9]*\)</java.version>.*:\1:p' pom.xml | head -1)"
+JAVA_EXIGIDO="${JAVA_EXIGIDO:-21}"
+JAVA_ATUAL="$(java -XshowSettings:properties -version 2>&1 | sed -n 's/.*java.specification.version = \([0-9]*\).*/\1/p' | head -1)"
+echo ">> Calculadora exige Java $JAVA_EXIGIDO (em uso: ${JAVA_ATUAL:-?})"
+if [ -n "$JAVA_ATUAL" ] && [ "$JAVA_ATUAL" -lt "$JAVA_EXIGIDO" ]; then
+  echo "ERRO: a calculadora oficial passou a exigir Java $JAVA_EXIGIDO; configure um JDK $JAVA_EXIGIDO (no GitHub isso é automático)."
+  exit 1
+fi
+JRE_URL="https://api.adoptium.net/v3/binary/latest/$JAVA_EXIGIDO/ga/windows/x64/jre/hotspot/normal/eclipse"
 
 MVN="mvn"
 command -v mvn >/dev/null 2>&1 || MVN="./mvnw"
@@ -34,7 +44,7 @@ $MVN -q flyway:migrate -Dflyway.configFiles=./flyway/flyway-pro.conf --batch-mod
 echo ">> Compilando a calculadora"
 $MVN -q clean package -DskipTests --batch-mode
 VERSAO_APP="$($MVN -q help:evaluate -Dexpression=project.version -DforceStdout --batch-mode 2>/dev/null | tail -1)"
-VERSAO_DB="$(ls flyway/sql | sed -n 's/^\(V[0-9]*\)__.*/\1/p' | sort -V | tail -1)"
+VERSAO_DB="$(find flyway/sql -name 'V*__*.sql' -printf '%f\n' | sed -n 's/^\(V[0-9]*\)__.*/\1/p' | sort -V | tail -1)"
 HASH_SIM="$(cd "$SIM" && git ls-tree HEAD web pacote scripts ferramentas/teste_rapido 2>/dev/null | sha1sum | cut -c1-7)"
 PACOTE="v${VERSAO_APP}-${COMMIT:0:7}-s${HASH_SIM}"
 
@@ -50,6 +60,7 @@ cat > "$APP/web/versao.json" <<EOF
   "pacote": "$PACOTE",
   "versao_calculadora": "$VERSAO_APP",
   "versao_tabelas": "$VERSAO_DB",
+  "java": "$JAVA_EXIGIDO",
   "commit_calculadora": "$COMMIT",
   "data_commit_calculadora": "$DATA_COMMIT",
   "montado_em": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -62,7 +73,7 @@ awk '/^## \[/{n++} n==1' CHANGELOG.md > "$SAIDA/notas.md" || true
 
 echo ">> Teste rápido: subindo a calculadora com a tela do simulador"
 PORTA=18765
-( cd "$APP" && java -Dspring.profiles.active=offline -jar api-regime-geral.jar --server.port=$PORTA \
+( cd "$APP" && java -XX:-UseBASE64Intrinsics -Dspring.profiles.active=offline -jar api-regime-geral.jar --server.port=$PORTA \
     --spring.web.resources.static-locations=file:./web/ --management.server.port=-1 > "$TRAB/api.log" 2>&1 & echo $! > "$TRAB/pid" )
 OK=""
 for _ in $(seq 1 60); do
@@ -119,6 +130,8 @@ if [ "$SEM_JRE" != "--sem-jre" ]; then
   unzip -q "$TRAB/jre.zip" -d "$TRAB/jre_tmp"
   mv "$TRAB"/jre_tmp/* "$TRAB/Simulador-RTC/jre"
   ( cd "$TRAB" && zip -qr "$SAIDA/Simulador-RTC-Windows.zip" Simulador-RTC )
+  # Java separado: o lançador já instalado troca o Java sozinho quando a calculadora passa a exigir outra versão
+  ( cd "$TRAB/Simulador-RTC" && zip -qr "$SAIDA/jre-windows-x64.zip" jre )
 fi
 
 echo "PACOTE=$PACOTE" > "$SAIDA/pacote.env"

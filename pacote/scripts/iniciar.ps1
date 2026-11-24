@@ -80,6 +80,47 @@ if ($cfg.verificar_atualizacao) {
   }
 }
 
+# ---------- 1b) Java exigido pela calculadora ----------
+# Quando a calculadora oficial passa a exigir um Java mais novo, troca o Java embutido (pasta jre).
+function Versao-JavaInstalado {
+  $rel = Join-Path $Raiz 'jre\release'
+  if (-not (Test-Path $rel)) { return 0 }
+  $m = Select-String -Path $rel -Pattern 'JAVA_VERSION="(\d+)' | Select-Object -First 1
+  if ($m) { return [int]$m.Matches[0].Groups[1].Value }
+  return 0
+}
+$local = Ler-VersaoLocal
+$javaExigido = 0
+if ($local -and $local.java) { $javaExigido = [int]$local.java }
+$javaAtual = Versao-JavaInstalado
+if ($javaExigido -gt 0 -and $javaAtual -lt $javaExigido) {
+  Escrever "A calculadora exige Java $javaExigido (instalado: $javaAtual). Atualizando o Java embutido (cerca de 50 MB)..."
+  $jre = Join-Path $Raiz 'jre'
+  try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $rel = Invoke-RestMethod -Uri $cfg.url_atualizacao -TimeoutSec 15 -Headers @{ 'User-Agent' = 'simulador-rtc' }
+    $nomeJre = 'jre-windows-x64.zip'
+    if ($cfg.arquivo_jre) { $nomeJre = $cfg.arquivo_jre }
+    $asset = $rel.assets | Where-Object { $_.name -eq $nomeJre } | Select-Object -First 1
+    if (-not $asset) { throw "arquivo $nomeJre nao encontrado no Release" }
+    $tmp = Join-Path $env:TEMP ("simulador-rtc-jre-" + [guid]::NewGuid())
+    New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+    $zip = Join-Path $tmp 'jre.zip'
+    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zip -UseBasicParsing -Headers @{ 'User-Agent' = 'simulador-rtc' }
+    Expand-Archive -Path $zip -DestinationPath (Join-Path $tmp 'x') -Force
+    Parar-Calculadora
+    if (Test-Path "$jre.anterior") { Remove-Item "$jre.anterior" -Recurse -Force }
+    if (Test-Path $jre) { Rename-Item $jre "$jre.anterior" }
+    Move-Item (Join-Path $tmp 'x\jre') $jre
+    Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item "$jre.anterior" -Recurse -Force -ErrorAction SilentlyContinue
+    Escrever ("Java atualizado para a versao {0}." -f (Versao-JavaInstalado))
+  } catch {
+    Escrever ("Nao foi possivel atualizar o Java ({0}). Baixe o pacote completo novamente: Simulador-RTC-Windows.zip na pagina de Releases." -f $_.Exception.Message)
+    if (-not (Test-Path $jre) -and (Test-Path "$jre.anterior")) { Rename-Item "$jre.anterior" $jre }
+  }
+}
+
 # ---------- 2) calculadora ----------
 $IniciouCalculadora = $false
 if (Calculadora-NoAr) {
@@ -92,7 +133,7 @@ if (Calculadora-NoAr) {
     if ($cmd) { $java = $cmd.Source } else { throw 'Java nao encontrado. Baixe novamente o pacote completo (Simulador-RTC-Windows.zip).' }
   }
   Escrever 'Iniciando a calculadora oficial (leva de 10 a 40 segundos)...'
-  $argsJava = @('-Xmx1g', '-Dspring.profiles.active=offline', '-jar', 'api-regime-geral.jar',
+  $argsJava = @('-Xmx1g', '-XX:-UseBASE64Intrinsics', '-Dspring.profiles.active=offline', '-jar', 'api-regime-geral.jar',
             "--server.port=$Porta", '--spring.web.resources.static-locations=file:./web/', '--management.server.port=-1')
   $p = Start-Process -FilePath $java -ArgumentList $argsJava -WorkingDirectory $App -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput (Join-Path $Logs 'calculadora.log') -RedirectStandardError (Join-Path $Logs 'calculadora-erros.log')

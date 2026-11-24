@@ -88,7 +88,7 @@
         if (natureza && natureza !== nat) return;
         bases.split(' ').forEach((k) => { tot[k] += sinal * v; });
       });
-      return { baseRG: arred(tot.RG, 8), baseIS: arred(tot.IS, 8), baseSN: arred(tot.SN, 8), avisos };
+      return { baseRG: arred(tot.RG), baseIS: arred(tot.IS), baseSN: arred(tot.SN), avisos }; // bases com 2 casas (calculadora 1.7.2+)
     }
 
     function erro(item, idx, code, campo, title, detail) {
@@ -128,7 +128,7 @@
       }
       if (isItem && ano >= 2027) {
         const adv = item.aliquotasNominais && item.aliquotasNominais.impostoSeletivo ? Number(item.aliquotasNominais.impostoSeletivo.adValorem || 0) : 0;
-        vIS = arred(Number(isItem.baseCalculo) * adv / 100, 8); // precisão interna (8 casas)
+        vIS = arred(Number(isItem.baseCalculo) * adv / 100); // o vIS exibido (2 casas) compõe a base (1.7.2+)
         grupoIS = { CSTIS: isItem.cst, cClassTribIS: isItem.cClassTrib, vBCIS: s2(isItem.baseCalculo), pIS: adv.toFixed(2), vIS: s2(vIS) };
       }
       let baseInf = item.baseCalculo;
@@ -143,15 +143,16 @@
       if (/\*0\.5$/.test(t.bc)) base = Number(baseInf) * 0.5;
       if (/\(1-100\/100\)/.test(t.bc)) base = 0;
 
+      base = arred(base); // base arredondada a 2 casas antes de multiplicar (1.7.2+)
       const tributo = (p, red) => {
-        const ef = p * (1 - red / 100);
+        const ef = arred(p * (1 - red / 100), 4); // alíquota efetiva com 4 casas (1.7.2+)
         const grupo = { v: arred(base * ef / 100), p, red, ef };
         return grupo;
       };
       const cbs = tributo(al.cbs, c.percentualReducaoCbs || 0);
       const uf = tributo(al.uf, c.percentualReducaoIbsUf || 0);
       const mun = tributo(al.mun, c.percentualReducaoIbsMun || 0);
-      const red = (x) => (x.red ? { gRed: { pRedAliq: x.red.toFixed(2), pAliqEfet: s2(x.ef) } } : {});
+      const red = (x) => (x.red ? { gRed: { pRedAliq: x.red.toFixed(2), pAliqEfet: x.ef.toFixed(4).replace(/0{1,2}$/, '') } } : {});
       const tribCalc = {
         IBSCBS: {
           CST: item.cst, cClassTrib: item.cClassTrib,
